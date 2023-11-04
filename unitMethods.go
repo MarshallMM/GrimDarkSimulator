@@ -2,6 +2,7 @@ package main
 
 import (
 	"io/ioutil"
+	"sort"
 
 	"gopkg.in/yaml.v2"
 )
@@ -73,6 +74,44 @@ func loadUnit(name string) Unit {
 	unit := Unit{}
 	if err = yaml.Unmarshal(data, &unit); err != nil {
 		panic(err)
+	}
+	// sort priorities
+	m := unit.Models
+	pairs := make([][2]interface{}, 0, len(m))
+	for k, v := range m {
+		pairs = append(pairs, [2]interface{}{k, v.Priority})
+	}
+
+	// sort slice based on values
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i][1].(int) < pairs[j][1].(int)
+	})
+
+	// extract sorted pairs
+	keys := make([]string, len(pairs))
+	for i, p := range pairs {
+		keys[i] = p[0].(string)
+	}
+	unit.ModelOrder = keys
+	unit.Source = name
+	for modelName, model := range unit.Models {
+		unitData := unit.Models[modelName]
+		unitData.Killed = 0
+		unitData.CarryOverWounds = 0
+
+		for loadoutName, loadOut := range model.Loadouts {
+			loadOut.Modifiers.CritHit = 6
+			loadOut.Modifiers.CritHitFish = false
+			loadOut.Modifiers.CritWound = 6
+			loadOut.Modifiers.CritWoundFish = false
+			loadOut.Modifiers.HitMod = 0
+			loadOut.Modifiers.WoundMod = 0
+			loadOut.Modifiers.RerollHit1s = false
+			loadOut.Modifiers.RerollHits = false
+			loadOut.Modifiers.RerollWound1s = false
+			loadOut.Modifiers.RerollWounds = false
+			unit.Models[modelName].Loadouts[loadoutName] = loadOut
+		}
 	}
 	return unit
 }
