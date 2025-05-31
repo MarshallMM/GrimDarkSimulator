@@ -1,0 +1,110 @@
+name: Brutalis Dreadnought
+type: model
+cost: 160
+abilities:
+- 'Damaged: 1-4 Wounds Remaining'
+- Deadly Demise
+- Oath of Moment
+keywords:
+- Brutalis Dreadnought
+- Dreadnought
+- 'Faction: Adeptus Astartes'
+- Imperium
+- Vehicle
+- Walker
+models:
+- name: Brutalis Dreadnought
+  count: 1
+  stats:
+    LD: 6+
+    M: 8"
+    OC: "4"
+    SV: 2+
+    T: "10"
+    W: "12"
+  loadouts:
+    Bolt Rifle:
+      name: Bolt Rifle
+      type: Ranged Weapons
+      A: "2"
+      AP: "-1"
+      BS: 3+
+      D: "1"
+      Keywords: '-'
+      Range: 24"
+      S: "4"
+    Heavy Bolter:
+      name: Heavy Bolter
+      type: Ranged Weapons
+      A: "3"
+      AP: "-1"
+      BS: 3+
+      D: "2"
+      Keywords: Assault, Heavy, Sustained Hits 1
+      Range: 36"
+      S: "5"
+    Ironhail Heavy Stubber:
+      name: Ironhail Heavy Stubber
+      type: Ranged Weapons
+      A: "3"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Rapid Fire 3
+      Range: 36"
+      S: "4"
+    Multi-melta:
+      name: Multi-melta
+      type: Ranged Weapons
+      A: "2"
+      AP: "-4"
+      BS: 3+
+      D: D6
+      Keywords: Melta 2
+      Range: 18"
+      S: "9"
+    Twin Heavy Bolter:
+      name: Twin Heavy Bolter
+      type: Ranged Weapons
+      A: "3"
+      AP: "-1"
+      BS: 3+
+      D: "2"
+      Keywords: Sustained Hits 1, Twin-linked
+      Range: 36"
+      S: "5"
+    Twin Icarus Ironhail Heavy Stubber:
+      name: Twin Icarus Ironhail Heavy Stubber
+      type: Ranged Weapons
+      A: "3"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Anti-FLY 4+, Rapid Fire 3, Twin-linked
+      Range: 36"
+      S: "4"
+    Twin Multi-melta:
+      name: Twin Multi-melta
+      type: Ranged Weapons
+      A: "2"
+      AP: "-4"
+      BS: 3+
+      D: D6
+      Keywords: Melta 2, Twin-linked
+      Range: 18"
+      S: "9"
+loadout_options:
+- name: Melee Weapon Option
+  type: group
+  options:
+  - Brutalis Fists & Brutalis Bolt Rifles
+  - Brutalis Talons
+- name: Ranged Weapon Option
+  type: group
+  options:
+  - Twin Heavy Bolter
+  - Twin Multi-melta
+- name: Wargear
+  type: group
+  options:
+  - Twin Icarus Ironhail Heavy Stubber
