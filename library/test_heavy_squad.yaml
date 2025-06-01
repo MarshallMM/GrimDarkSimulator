@@ -1,0 +1,69 @@
+name: Test Heavy Squad
+type: model
+cost: 150
+abilities:
+- Stationary
+- Rapid Fire Distance
+- Red Rampage
+- Fire Discipline
+keywords:
+- Infantry
+- 'Faction: Adeptus Astartes'
+- Imperium
+- Heavy Support
+models:
+- name: Heavy Marine
+  count: 2
+  stats:
+    LD: 6+
+    M: 6"
+    OC: "2"
+    SV: 3+
+    T: "4"
+    W: "2"
+  loadouts:
+    Heavy Bolter:
+      name: Heavy Bolter
+      type: Ranged Weapons
+      A: "3"
+      AP: "-1"
+      BS: 3+
+      D: "2"
+      Keywords: Heavy, Sustained Hits 1
+      Range: 36"
+      S: "5"
+    Rapid Fire Weapon:
+      name: Rapid Fire Lasgun
+      type: Ranged Weapons
+      A: "2"
+      AP: "0"
+      BS: 4+
+      D: "1"
+      Keywords: Rapid Fire 1
+      Range: 24"
+      S: "3"
+    Twin-linked Autocannon:
+      name: Twin-linked Autocannon
+      type: Ranged Weapons
+      A: "4"
+      AP: "-1"
+      BS: 4+
+      D: "3"
+      Keywords: Twin-linked
+      Range: 48"
+      S: "9"
+    Power Weapon:
+      name: Power Weapon
+      type: Melee Weapons
+      A: "3"
+      AP: "-2"
+      WS: 3+
+      D: "1"
+      Keywords: ""
+      S: "5"
+loadout_options:
+- name: Weapon Options
+  type: group
+  options:
+  - Heavy Bolter
+  - Twin-linked Autocannon 

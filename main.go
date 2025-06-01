@@ -9,7 +9,7 @@ import (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	attacker := "captain_with_jump_pack.yaml"
+	attacker := "test_heavy_squad.yaml"
 	var conflict UnitAttackSequence
 
 	defenderFiles := []struct {
@@ -19,7 +19,7 @@ func main() {
 		{"Bladeguard Squad", "bladeguard_veteran_squad.yaml"},
 	}
 
-	fmt.Printf("Testing unit loading and loadout attack functionality...\n\n")
+	fmt.Printf("Testing abilities system with Test Heavy Squad...\n\n")
 
 	// Test loading the attacker
 	fmt.Printf("Loading attacker: %s\n", attacker)
@@ -32,13 +32,50 @@ func main() {
 		conflict.Defender = loadUnit(def.file)
 
 		// Test a single complete attack sequence (hits + wounds + saves + damage)
-		fmt.Printf("\n--- Complete Attack Sequence Test ---\n")
-		damage := conflict.loadoutAttackWithWounds()
-		fmt.Printf("Total damage applied: %d\n\n", damage)
+		fmt.Printf("\n--- Single Attack Test ---\n")
+		damage := conflict.loadoutAttackSequence()
+		fmt.Printf("Total damage dealt: %d\n", damage)
 
-		// Run simulation for statistics
-		x2, y2 := conflict.damageSim()
-		fmt.Printf("%s: 68th: %v, 95th: %v\n\n", def.name, x2, y2)
+		// Reload units for clean state
+		conflict.Attacker.Reload()
+		conflict.Defender.Reload()
+
+		// Run 100 simulations for statistical analysis
+		damages := []int{}
+
+		// Initialize logger only for the first simulation
+		initLogger()
+		defer closeLogger()
+
+		for i := 0; i < 100; i++ {
+			if i > 0 {
+				// Disable logging after first simulation
+				combatLogger = nil
+			}
+
+			damage = conflict.loadoutAttackSequence()
+			damages = append(damages, damage)
+
+			// Reload units for next simulation
+			conflict.Attacker.Reload()
+			conflict.Defender.Reload()
+		}
+
+		// Calculate statistics
+		sort.Ints(damages)
+		mean := float64(0)
+		for _, d := range damages {
+			mean += float64(d)
+		}
+		mean /= float64(len(damages))
+
+		fmt.Printf("\n--- Statistical Analysis (100 simulations) ---\n")
+		fmt.Printf("Mean damage: %.2f\n", mean)
+		fmt.Printf("Min damage: %d\n", damages[0])
+		fmt.Printf("Max damage: %d\n", damages[len(damages)-1])
+		fmt.Printf("68th percentile: %d\n", damages[67]) // ~1 standard deviation for normal distribution
+		fmt.Printf("95th percentile: %d\n", damages[94]) // ~2 standard deviations for normal distribution
+		fmt.Printf("Range of outcomes: %d-%d damage\n", damages[0], damages[len(damages)-1])
 	}
 }
 
@@ -58,7 +95,7 @@ func (conflict *UnitAttackSequence) damageSim() (int, int) {
 		conflict.Attacker.Reload()
 
 		// Use the complete attack sequence with saves and damage
-		damage = conflict.loadoutAttackWithWounds()
+		damage = conflict.loadoutAttackSequence()
 		numbers = append(numbers, damage)
 
 		// Disable logger after first run

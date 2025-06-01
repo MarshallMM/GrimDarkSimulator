@@ -401,7 +401,10 @@ func (w *WeaponProfile) GetStringCharacteristic(name string) string {
 }
 
 // Enhanced loadout attack method that includes wound rolling and saves
-func (conflict *UnitAttackSequence) loadoutAttackWithWounds() int {
+func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
+	// Apply abilities and weapon modifications at start of combat
+	conflict.applyAbilities()
+
 	totalDamage := 0
 
 	// Find the first alive model in the defender for targeting
@@ -642,12 +645,12 @@ func (conflict *UnitAttackSequence) loadoutAttackWithWounds() int {
 				}
 
 				// PHASE 2: Roll for wounds
-				wounds, criticalWounds := conflict.rollWoundsWithDetailedLogging(hits, weapon, targetModel, lethalHits)
+				wounds, criticalWounds := conflict.rollWounds(hits, weapon, targetModel, lethalHits)
 
 				// PHASE 3: Roll for saves and apply damage
 				damageApplied := 0
 				if wounds > 0 {
-					damageApplied = conflict.rollSavesWithDetailedLogging(wounds, criticalWounds, weapon, targetModel, targetModelIndex)
+					damageApplied = conflict.rollSaves(wounds, criticalWounds, weapon, targetModel, targetModelIndex)
 					totalDamage += damageApplied
 				}
 
@@ -682,7 +685,7 @@ func (conflict *UnitAttackSequence) loadoutAttackWithWounds() int {
 }
 
 // Wound rolling method with detailed logging for each roll
-func (conflict *UnitAttackSequence) rollWoundsWithDetailedLogging(hits int, weapon WeaponProfile, targetModel *ModelData, lethalHits int) (int, int) {
+func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, targetModel *ModelData, lethalHits int) (int, int) {
 	if hits <= 0 {
 		return 0, 0
 	}
@@ -840,7 +843,7 @@ func (conflict *UnitAttackSequence) rollWoundsWithDetailedLogging(hits int, weap
 }
 
 // Save rolling method with detailed logging for each roll
-func (conflict *UnitAttackSequence) rollSavesWithDetailedLogging(wounds int, criticalWounds int, weapon WeaponProfile, targetModel *ModelData, targetModelIndex int) int {
+func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, weapon WeaponProfile, targetModel *ModelData, targetModelIndex int) int {
 	if wounds <= 0 {
 		return 0
 	}
@@ -1007,4 +1010,225 @@ func (conflict *UnitAttackSequence) rollSavesWithDetailedLogging(wounds int, cri
 	}
 
 	return damageApplied
+}
+
+// Apply abilities and weapon keywords that modify combat characteristics
+func (conflict *UnitAttackSequence) applyAbilities() {
+	if combatLogger != nil {
+		combatLogger.Info("Starting ability processing",
+			zap.String("attacker_unit", conflict.Attacker.Name),
+			zap.Strings("attacker_abilities", conflict.Attacker.Abilities))
+	}
+
+	// Process attacker abilities
+	for _, ability := range conflict.Attacker.Abilities {
+		switch strings.ToLower(ability) {
+		case "oath of moment":
+			// Set reroll hits for all loadouts
+			weaponsModified := 0
+			for modelIndex := range conflict.Attacker.Models {
+				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+					if !weapon.Modifiers.RerollHits { // Only modify if not already set
+						weapon.Modifiers.RerollHits = true
+						conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+						weaponsModified++
+
+						if combatLogger != nil {
+							combatLogger.Info("Applied Oath of Moment",
+								zap.String("ability", "Oath of Moment"),
+								zap.String("weapon_name", weaponName),
+								zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
+								zap.String("effect", "RerollHits = true"),
+								zap.Bool("previous_reroll_hits", false),
+								zap.Bool("new_reroll_hits", true))
+						}
+					}
+				}
+			}
+			if _heavyComments {
+				fmt.Printf("Applied Oath of Moment: All weapons gain reroll hits (%d weapons modified)\n", weaponsModified)
+			}
+
+		case "stationary":
+			// Heavy weapons get +1 to hit when stationary
+			heavyWeaponsModified := 0
+			for modelIndex := range conflict.Attacker.Models {
+				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+					keywords := strings.ToLower(weapon.GetStringCharacteristic("Keywords"))
+					if strings.Contains(keywords, "heavy") {
+						previousHitMod := weapon.Modifiers.HitMod
+						weapon.Modifiers.HitMod += 1
+						conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+						heavyWeaponsModified++
+
+						if combatLogger != nil {
+							combatLogger.Info("Applied Stationary",
+								zap.String("ability", "Stationary"),
+								zap.String("weapon_name", weaponName),
+								zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
+								zap.String("weapon_keywords", keywords),
+								zap.String("effect", "HitMod += 1"),
+								zap.Int("previous_hit_mod", previousHitMod),
+								zap.Int("new_hit_mod", weapon.Modifiers.HitMod))
+						}
+					}
+				}
+			}
+			if _heavyComments {
+				fmt.Printf("Applied Stationary: Heavy weapons gain +1 to hit (%d weapons modified)\n", heavyWeaponsModified)
+			}
+
+		case "rapid fire distance":
+			// Rapid Fire weapons get additional shots equal to their rapid fire value
+			rapidFireWeaponsModified := 0
+			for modelIndex := range conflict.Attacker.Models {
+				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+					keywords := strings.ToLower(weapon.GetStringCharacteristic("Keywords"))
+					if strings.Contains(keywords, "rapid fire") {
+						// Parse rapid fire value - look for "rapid fire X"
+						keywordParts := strings.Fields(keywords)
+						for j, part := range keywordParts {
+							if part == "rapid" && j+2 < len(keywordParts) && keywordParts[j+1] == "fire" {
+								if rapidFireValue, err := strconv.Atoi(keywordParts[j+2]); err == nil {
+									// Get current attacks and add rapid fire bonus
+									attacksStr := weapon.GetStringCharacteristic("A")
+									if attacksStr != "" {
+										if currentAttacks, err := strconv.Atoi(attacksStr); err == nil {
+											newAttacks := currentAttacks + rapidFireValue
+											weapon.Characteristics["A"] = strconv.Itoa(newAttacks)
+											conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+											rapidFireWeaponsModified++
+
+											if combatLogger != nil {
+												combatLogger.Info("Applied Rapid Fire Distance",
+													zap.String("ability", "Rapid Fire Distance"),
+													zap.String("weapon_name", weaponName),
+													zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
+													zap.String("weapon_keywords", keywords),
+													zap.Int("rapid_fire_value", rapidFireValue),
+													zap.String("effect", fmt.Sprintf("Attacks += %d", rapidFireValue)),
+													zap.Int("previous_attacks", currentAttacks),
+													zap.Int("new_attacks", newAttacks))
+											}
+
+											if _heavyComments {
+												fmt.Printf("Applied Rapid Fire Distance: %s gains +%d attacks (%d → %d)\n",
+													weaponName, rapidFireValue, currentAttacks, newAttacks)
+											}
+										}
+									}
+								}
+								break
+							}
+						}
+					}
+				}
+			}
+
+		case "red rampage":
+			// Red Rampage stratagem: Choose Lethal Hits OR Lance, or both with Battle-shocked
+			// For simulation purposes, we'll implement as "gives both effects but unit becomes battle-shocked"
+			// In a real game, this would be a player choice during combat
+			// RED RAMPAGE ONLY AFFECTS MELEE WEAPONS (Fight Phase stratagem)
+			weaponsModified := 0
+
+			for modelIndex := range conflict.Attacker.Models {
+				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+					// Only apply to melee weapons
+					weaponType := strings.ToLower(weapon.Type)
+					if !strings.Contains(weaponType, "melee") {
+						continue // Skip ranged weapons
+					}
+
+					// Apply both Lethal Hits and Lance effects (simulating "giving into the rampage")
+					keywords := weapon.GetStringCharacteristic("Keywords")
+
+					// Add Lethal Hits if not already present
+					if !strings.Contains(strings.ToLower(keywords), "lethal hits") {
+						if keywords != "" {
+							keywords += ", Lethal Hits"
+						} else {
+							keywords = "Lethal Hits"
+						}
+					}
+
+					// Add Lance if not already present
+					if !strings.Contains(strings.ToLower(keywords), "lance") {
+						if keywords != "" {
+							keywords += ", Lance"
+						} else {
+							keywords = "Lance"
+						}
+					}
+
+					weapon.Characteristics["Keywords"] = keywords
+					conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+					weaponsModified++
+
+					if combatLogger != nil {
+						combatLogger.Info("Applied Red Rampage",
+							zap.String("ability", "Red Rampage"),
+							zap.String("weapon_name", weaponName),
+							zap.String("weapon_type", weapon.Type),
+							zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
+							zap.String("effect", "Added Lethal Hits + Lance (melee only)"),
+							zap.String("new_keywords", keywords),
+							zap.Bool("unit_battle_shocked", true))
+					}
+				}
+			}
+
+			if _heavyComments {
+				fmt.Printf("Applied Red Rampage: Melee weapons gain Lethal Hits + Lance, unit becomes Battle-shocked (%d melee weapons modified)\n", weaponsModified)
+			}
+
+			// Note: In a real implementation, you'd track that the unit is Battle-shocked
+			// This affects objective control (becomes 0) and prevents use of certain stratagems
+		}
+	}
+
+	// Process weapon-specific abilities (Twin-linked)
+	twinLinkedWeaponsModified := 0
+	for modelIndex := range conflict.Attacker.Models {
+		for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+			weaponNameLower := strings.ToLower(weaponName)
+			keywords := strings.ToLower(weapon.GetStringCharacteristic("Keywords"))
+
+			// Check for Twin-linked in weapon name or keywords
+			if strings.Contains(weaponNameLower, "twin-linked") || strings.Contains(keywords, "twin-linked") {
+				if !weapon.Modifiers.RerollWounds { // Only modify if not already set
+					weapon.Modifiers.RerollWounds = true
+					conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+					twinLinkedWeaponsModified++
+
+					if combatLogger != nil {
+						combatLogger.Info("Applied Twin-linked",
+							zap.String("ability", "Twin-linked"),
+							zap.String("weapon_name", weaponName),
+							zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
+							zap.String("weapon_keywords", keywords),
+							zap.String("detection_method", func() string {
+								if strings.Contains(weaponNameLower, "twin-linked") {
+									return "weapon name"
+								}
+								return "weapon keywords"
+							}()),
+							zap.String("effect", "RerollWounds = true"),
+							zap.Bool("previous_reroll_wounds", false),
+							zap.Bool("new_reroll_wounds", true))
+					}
+
+					if _heavyComments {
+						fmt.Printf("Applied Twin-linked: %s gains reroll wounds\n", weaponName)
+					}
+				}
+			}
+		}
+	}
+
+	if combatLogger != nil {
+		combatLogger.Info("Ability processing complete",
+			zap.String("attacker_unit", conflict.Attacker.Name),
+			zap.Int("twin_linked_weapons_modified", twinLinkedWeaponsModified))
+	}
 }

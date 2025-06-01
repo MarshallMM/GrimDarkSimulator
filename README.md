@@ -22,6 +22,20 @@ A comprehensive Warhammer 40k combat simulator written in Go that accurately mod
 - **Wound Rerolls**: Full rerolls or reroll 1s only
 - **Complete Transparency**: All original and reroll results logged
 
+### 🛡️ Abilities System
+The simulator automatically detects and applies unit abilities that modify combat characteristics:
+
+#### Unit Abilities
+- **Oath of Moment**: All weapons gain reroll hits capability
+- **Stationary**: Heavy weapons receive +1 to hit modifier
+- **Rapid Fire Distance**: Rapid Fire weapons gain additional attacks equal to their Rapid Fire value
+- **Red Rampage**: Melee weapons gain both Lethal Hits and Lance abilities, but unit becomes Battle-shocked
+
+#### Weapon Abilities
+- **Twin-linked**: Weapons with "Twin-linked" in name or keywords gain reroll wounds
+- **Heavy**: When combined with "Stationary" ability, gains +1 to hit
+- **Rapid Fire X**: When combined with "Rapid Fire Distance" ability, gains X additional attacks
+
 ### 📊 Statistical Analysis
 - **100 Simulation Runs**: Comprehensive damage distribution
 - **Percentile Analysis**: 68th and 95th percentile damage outputs
@@ -31,6 +45,7 @@ A comprehensive Warhammer 40k combat simulator written in Go that accurately mod
 - **Phase-by-Phase Breakdown**: Every step of combat logged
 - **Individual Dice Rolls**: All hit/wound/save rolls recorded
 - **Special Rule Tracking**: Critical hits, rerolls, and abilities logged
+- **Ability Applications**: All ability modifications logged with before/after values
 - **Defender Status**: Remaining models and wounds after each attack
 - **JSON Structured Logs**: Machine-readable combat data
 
@@ -63,6 +78,7 @@ cost: 85
 abilities:
   - "Leader"
   - "Deep Strike"
+  - "Oath of Moment"  # Grants reroll hits to all weapons
 keywords:
   - "Infantry"
   - "Character"
@@ -85,27 +101,29 @@ models:
         S: "5"
         AP: "2"
         D: "2"
-      "Flamer":
-        name: "Flamer"
+        Keywords: "Lethal Hits, Sustained Hits 1"
+      "Heavy Bolter":
+        name: "Heavy Bolter"
         type: "Ranged Weapons"
-        Range: "12\""
-        A: "D6"
-        BS: "2+"
-        S: "4"
-        AP: "0"
-        D: "1"
-        Keywords: "Torrent"
+        Range: "36\""
+        A: "3"
+        BS: "3+"
+        S: "5"
+        AP: "1"
+        D: "2"
+        Keywords: "Heavy, Sustained Hits 1"  # Benefits from Stationary
 ```
 
 ## Combat Mechanics
 
 ### Hit Resolution
-1. **Skill Check**: Roll vs BS (ranged) or WS (melee)
-2. **Critical Hits**: Rolls ≥ CritHit value (default 6+)
-3. **Special Rules**: 
+1. **Abilities Check**: Apply unit and weapon abilities that modify hit characteristics
+2. **Skill Check**: Roll vs BS (ranged) or WS (melee)
+3. **Critical Hits**: Rolls ≥ CritHit value (default 6+)
+4. **Special Rules**: 
    - Lethal Hits: Critical hits auto-wound
    - Sustained Hits X: Add X hits per critical
-4. **Rerolls**: Apply hit rerolls if available
+5. **Rerolls**: Apply hit rerolls if available
 
 ### Wound Resolution  
 1. **S vs T Matrix**: Calculate wound threshold
@@ -124,15 +142,51 @@ models:
 3. **AP Modification**: Armor saves modified by weapon AP
 4. **Damage Application**: Failed saves apply weapon damage
 
+### Abilities Processing
+Abilities are automatically applied at the start of each combat sequence:
+
+1. **Unit Abilities**: Processed first, affecting all applicable weapons
+2. **Weapon Keywords**: Processed second, affecting specific weapons
+3. **Logging**: All ability applications are logged with before/after values
+4. **Stacking**: Multiple modifiers can stack (e.g., +1 hit from multiple sources)
+
+## Abilities Reference
+
+### Oath of Moment
+- **Effect**: All weapons gain `RerollHits = true`
+- **Application**: Applied to every weapon in every model's loadout
+- **Usage**: Represents focused targeting and battle prayer benefits
+
+### Stationary
+- **Effect**: Heavy weapons gain `HitMod += 1` (+1 to hit)
+- **Application**: Only affects weapons with "Heavy" keyword
+- **Usage**: Represents the accuracy benefit of stationary firing positions
+
+### Rapid Fire Distance
+- **Effect**: Rapid Fire weapons gain additional attacks equal to their Rapid Fire value
+- **Application**: Parses "Rapid Fire X" keywords and adds X to the weapon's attack count
+- **Usage**: Represents double-tapping at close range
+
+### Twin-linked
+- **Effect**: Weapons gain `RerollWounds = true`
+- **Application**: Affects weapons with "Twin-linked" in name or keywords
+- **Usage**: Represents multiple barrels/enhanced targeting systems
+
 ## Combat Log Example
 
 ```
+Applied Oath of Moment: All weapons gain reroll hits
+Applied Stationary: Heavy weapons gain +1 to hit
+Applied Rapid Fire Distance: Rapid Fire Lasgun gains +1 attacks (2 → 3)
+Applied Twin-linked: Twin-linked Autocannon gains reroll wounds
+
 Starting weapon attack: Captain attacking with Master-crafted Power Weapon
 Hit Phase - Rolling: 5 attacks, need 2+ to hit
   Hit Roll 1: Rolled 6, critical hit, hit
   Hit Roll 2: Rolled 3, normal hit  
-  Hit Roll 3: Rolled 1, miss
-Hit Phase Complete: 2 hits (0 Sustained Hits, 0 Lethal Hits)
+  Hit Roll 3: Rolled 1, miss, rerolling due to Oath of Moment
+  Hit Reroll 3: Rolled 4, hit
+Hit Phase Complete: 3 hits (0 Sustained Hits, 0 Lethal Hits)
 
 Wound Phase: S5 vs T4, need 3+ to wound
   Wound Roll 1: Rolled 6, Devastating Wound
@@ -183,6 +237,9 @@ Modifiers:
 - **Lethal Hits**: Critical hits automatically wound
 - **Sustained Hits X**: Critical hits generate X additional hits  
 - **Devastating Wounds**: Critical wounds bypass all saves
+- **Heavy**: Benefits from Stationary ability (+1 to hit)
+- **Rapid Fire X**: Benefits from Rapid Fire Distance ability (+X attacks)
+- **Twin-linked**: Weapons gain reroll wounds capability
 - **Feel No Pain**: Post-save damage reduction (if detected in abilities)
 - **NECRODERMIS**: Halves incoming damage (special faction rule)
 
