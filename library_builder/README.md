@@ -1,17 +1,16 @@
 # BattleScribe Library Builder
 
-A Go-based tool for extracting Warhammer 40k unit data from BattleScribe XML catalog files and converting them into clean YAML format for use in game simulators and other applications.
+A comprehensive Go-based tool for extracting and combining Warhammer 40k unit data from BattleScribe XML catalog files. Converts complex XML data into clean, simulation-ready YAML format with enhanced weapon extraction and unit combination capabilities.
 
-## Overview
+## Features
 
-This tool parses BattleScribe XML catalog files (`.cat` format) and extracts detailed unit information including:
-
-- **Unit Stats**: Movement, Toughness, Save, Leadership, etc.
-- **Weapon Profiles**: Range, Attacks, Ballistic/Weapon Skill, Strength, AP, Damage, Keywords
-- **Loadout Options**: Available weapon and equipment choices
-- **Unit Abilities**: Special rules and abilities
-- **Keywords**: Faction keywords, unit types, etc.
-- **Point Costs**: Current competitive point values
+- **📊 Complete Unit Data Extraction**: Stats, weapons, abilities, keywords, and costs
+- **⚔️ Enhanced Weapon Processing**: Extracts ALL weapon options including composite loadouts
+- **🛡️ Numerical Ability Values**: "Invulnerable Save (4+)" instead of just "Invulnerable Save"
+- **📈 ISV Statistics**: Adds Invulnerable Save values directly to model stats
+- **🔗 Unit Combination**: Merge multiple units for attached characters and combined forces
+- **🎯 Flattened Data Structure**: Easy-to-use format for game simulation
+- **📋 Individual Model Loadouts**: Weapons attached to specific models, not global profiles
 
 ## Prerequisites
 
@@ -39,188 +38,250 @@ This tool parses BattleScribe XML catalog files (`.cat` format) and extracts det
 
 ## Usage
 
-### Basic Command
+### Extract Individual Units
 
 ```bash
 go run main.go --unit "Unit Name"
 ```
 
-### Examples
-
-Extract a Brutalis Dreadnought:
+**Examples:**
 ```bash
+go run main.go --unit "Captain with Jump Pack"
+go run main.go --unit "Bladeguard Veteran Squad"
 go run main.go --unit "Brutalis Dreadnought"
 ```
 
-Extract an Intercessor Squad:
+### Combine Units
+
+Perfect for creating attached character combinations or combined forces:
+
 ```bash
-go run main.go --unit "Intercessor Squad"
+go run main.go --combine input1.yaml input2.yaml output.yaml
 ```
 
-Extract a Chaos unit:
+**Examples:**
 ```bash
-go run main.go --unit "Legionaries"
+# Attach a Captain to Bladeguard Veterans
+go run main.go --combine captain_with_jump_pack.yaml bladeguard_veteran_squad.yaml captain_with_bladeguard.yaml
+
+# Create a heavy support force
+go run main.go --combine brutalis_dreadnought.yaml bladeguard_veteran_squad.yaml armored_escort.yaml
 ```
 
-Extract a vehicle:
+### Get Help
+
 ```bash
-go run main.go --unit "Land Raider"
+go run main.go --help
 ```
 
-### Command-Line Options
+## Enhanced Output Format
 
-- `--unit "Unit Name"`: Specifies the exact name of the unit to extract (required)
-
-## Output Format
-
-The tool generates YAML files in the `library/` directory with the following structure:
+The tool generates comprehensive YAML files with the following structure:
 
 ```yaml
-name: Brutalis Dreadnought
+name: Captain with Jump Pack
 type: model
-cost: 160
+cost: 85
 abilities:
-- 'Damaged: 1-4 Wounds Remaining'
-- Deadly Demise
+- Angel's Wrath
+- Deep Strike
+- Invulnerable Save (4+)  # ← Enhanced with numerical values
+- Leader
 - Oath of Moment
+- Rites of Battle
 keywords:
-- Brutalis Dreadnought
-- Dreadnought
+- Captain
+- Character
 - 'Faction: Adeptus Astartes'
-- Imperium
-- Vehicle
-- Walker
+- Fly
+- Infantry
+- Jump Pack
 models:
-- name: Brutalis Dreadnought
+- name: Captain with Jump Pack
   count: 1
   stats:
+    ISV: 4+      # ← Invulnerable Save in stats
     LD: 6+
-    M: 8"
-    OC: "4"
-    SV: 2+
-    T: "10"
-    W: "12"
+    M: 12"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "5"
+  loadouts:     # ← Weapons attached to individual models
+    Bolt Pistol:
+      name: Bolt Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Pistol
+      Range: 12"
+      S: "4"
+    Master-crafted Power Weapon:
+      name: Master-crafted Power Weapon
+      type: Melee Weapons
+      A: "4"
+      AP: "-2"
+      D: "2"
+      Keywords: Precision
+      Range: Melee
+      S: "5"
+      WS: 2+
+    # ... 11 more weapons extracted!
 loadout_options:
-- name: Melee Weapon Option
+- name: Wargear
   type: group
   options:
-  - Brutalis Fists & Brutalis Bolt Rifles
-  - Brutalis Talons
-- name: Ranged Weapon Option
-  type: group
-  options:
-  - Twin Heavy Bolter
-  - Twin Multi-melta
-profiles:
-  Twin Heavy Bolter:
-    name: Twin Heavy Bolter
-    type: Ranged Weapons
-    A: "3"
-    AP: "-1"
-    BS: 3+
-    D: "2"
-    Keywords: Sustained Hits 1, Twin-linked
-    Range: 36"
-    S: "5"
+  - Melee and Pistol
+  - Thunder Hammer and Relic Shield
 ```
 
-### Output Fields Explained
+### Key Improvements
 
-- **name**: Unit name from BattleScribe
-- **type**: Unit type (unit, model, upgrade)
-- **cost**: Point cost in matched play
-- **abilities**: List of special rules and abilities
-- **keywords**: Faction keywords, unit types, and special designations
-- **models**: Individual model entries with stats and equipment
-- **loadout_options**: Available weapon and equipment choices organized by group
-- **profiles**: Detailed weapon and equipment profiles with full characteristics
+#### 🎯 **Enhanced Weapon Extraction**
+- **Before**: Captain with Jump Pack had 1 weapon
+- **After**: Captain with Jump Pack has 13 weapons including all pistol and melee options
+- Processes composite loadouts like "Melee and Pistol"
+- Extracts weapons from nested XML structures and entry links
 
-### Weapon Profile Format
+#### 🛡️ **Ability Values**
+- **Before**: "Invulnerable Save"
+- **After**: "Invulnerable Save (4+)"
+- Supports all save values: 2+, 3+, 4+, 5+, 6+
+- Extracts from both local rules and shared profiles
 
-Weapon characteristics are presented in a flat, easy-to-read format:
+#### 📊 **ISV in Stats**
+```yaml
+stats:
+  ISV: 4+      # ← Only appears if unit has invulnerable save
+  LD: 6+
+  M: 6"
+  OC: "1"
+  SV: 3+       # ← Regular armor save
+  T: "4"
+  W: "3"
+```
 
-- **Range**: Weapon range (e.g., "36\"", "Melee")
-- **A**: Number of attacks (e.g., "3", "D6")
-- **BS/WS**: Ballistic/Weapon Skill (e.g., "3+", "4+")
-- **S**: Strength (e.g., "5", "8")
-- **AP**: Armor Penetration (e.g., "-1", "-3")
-- **D**: Damage (e.g., "2", "D6")
-- **Keywords**: Special weapon abilities (e.g., "Twin-linked", "Melta 2")
+#### 🔗 **Unit Combination**
+Combined units include:
+- **Concatenated names**: "Captain with Jump Pack + Bladeguard Veteran Squad"
+- **Added costs**: 85 + 80 = 165 points
+- **All models**: Preserves individual model loadouts and stats
+- **Merged abilities**: Deduplicated list of all abilities
+- **Combined keywords**: Unified keyword list
+- **All loadout options**: Equipment choices from both units
+
+## Example Workflow
+
+### 1. Extract Individual Units
+```bash
+# Extract a character
+go run main.go --unit "Captain with Jump Pack"
+
+# Extract a squad
+go run main.go --unit "Bladeguard Veteran Squad"
+
+# Extract heavy support
+go run main.go --unit "Brutalis Dreadnought"
+```
+
+### 2. Combine for Attached Characters
+```bash
+# Create attached character unit
+go run main.go --combine captain_with_jump_pack.yaml bladeguard_veteran_squad.yaml elite_strike_team.yaml
+```
+
+### 3. Use in Simulation
+The resulting YAML files are ready for immediate use in game simulation with:
+- Complete weapon profiles with all characteristics
+- Individual model stats including ISV
+- Comprehensive ability and keyword lists
+- Clear loadout options for customization
+
+## Enhanced Data Structure
+
+### Model-Specific Loadouts
+Unlike the previous global weapon profiles, weapons are now attached to individual models:
+
+```yaml
+models:
+- name: Bladeguard Veteran        # Regular veteran
+  loadouts:
+    Heavy Bolt Pistol: {...}
+    Master-crafted Power Weapon: {...}
+    
+- name: Bladeguard Veteran Sergeant   # Sergeant with more options
+  loadouts:
+    Heavy Bolt Pistol: {...}
+    Neo-volkite Pistol: {...}
+    "➤ Plasma Pistol - Standard": {...}
+    "➤ Plasma Pistol - Supercharge": {...}
+    Master-crafted Power Weapon: {...}
+```
+
+### Flattened Weapon Characteristics
+All weapon stats are at the top level for easy access:
+
+```yaml
+Thunder Hammer:
+  name: Thunder Hammer
+  type: Melee Weapons
+  A: "3"           # Direct access to all stats
+  AP: "-2"
+  D: "2"
+  Keywords: Devastating Wounds
+  Range: Melee
+  S: "8"
+  WS: 4+
+```
 
 ## Finding Unit Names
 
-Since unit names must match exactly, you can search the catalog files to find the correct name:
+Unit names must match exactly. Search the catalog files:
 
-### Windows (Command Prompt/PowerShell)
+**Windows:**
 ```cmd
 findstr /i "unit_name" battlescribe-data-10e\*.cat
 ```
 
-### Linux/Mac
+**Linux/Mac:**
 ```bash
 grep -i "unit_name" battlescribe-data-10e/*.cat
 ```
 
-### Common Unit Name Patterns
-
-- Space Marine squads often end with "Squad" (e.g., "Intercessor Squad")
-- Individual characters usually have no suffix (e.g., "Captain")
-- Vehicles are often single names (e.g., "Land Raider", "Predator")
-- Some units have specific variants (e.g., "Brutalis Dreadnought")
-
 ## Troubleshooting
 
-### "Unit not found" Error
+### Unit Not Found
+1. Check exact spelling and capitalization
+2. Include full unit name (e.g., "Bladeguard Veteran Squad")
+3. Search catalog files for exact name
 
-1. **Check the exact spelling** - Unit names are case-sensitive
-2. **Include the full name** - Use "Bladeguard Veteran Squad" not "Bladeguard Veterans"
-3. **Search the catalog files** to find the exact name used
-4. **Try variations** - Some units might be in different catalogs or have alternate names
+### Missing Weapons
+- The tool now extracts composite loadouts automatically
+- If weapons are still missing, they may be in deeply nested XML structures
+- Check the unit's loadout_options for available choices
 
-### Empty or Missing Data
+### File Permissions
+- Ensure `library/` directory is writable
+- Check BattleScribe data file permissions
 
-- Some units may have incomplete data if they're in draft or beta status
-- Vehicle squadrons sometimes have data spread across multiple entries
-- Named characters might be in faction-specific catalogs
+## Technical Details
 
-### Permission Errors
+### Supported Features
+- ✅ Complex nested XML parsing
+- ✅ Shared entry and profile resolution
+- ✅ Recursive weapon extraction
+- ✅ Composite loadout processing
+- ✅ Ability value extraction
+- ✅ ISV calculation and assignment
+- ✅ Unit combination with deduplication
+- ✅ Error handling and validation
 
-- Ensure the `library/` directory is writable
-- Check that you have permission to read the BattleScribe data files
+### Performance
+- Processes units in seconds
+- Handles complex multi-model units
+- Efficient memory usage for large catalogs
+- Tab-completion friendly command interface
 
-## Example Workflow
-
-1. **Find your unit:**
-   ```bash
-   grep -i "intercessor" battlescribe-data-10e/*.cat
-   ```
-
-2. **Extract the unit:**
-   ```bash
-   go run main.go --unit "Intercessor Squad"
-   ```
-
-3. **Check the output:**
-   ```bash
-   cat library/intercessor_squad.yaml
-   ```
-
-4. **Use in your application:**
-   ```go
-   // Load the YAML file in your Go application
-   data, err := ioutil.ReadFile("library/intercessor_squad.yaml")
-   // Parse with yaml.Unmarshal()
-   ```
-
-## Contributing
-
-To improve the tool:
-
-1. **Add support for new data types** - Extend the XML structures
-2. **Improve parsing logic** - Handle edge cases and special unit types  
-3. **Add validation** - Ensure extracted data is complete and accurate
-4. **Optimize performance** - Cache shared entries and improve search algorithms
-
-## License
-
-This tool is for personal and educational use. BattleScribe data is owned by Games Workshop and maintained by the BSData community. 
+This enhanced library builder provides comprehensive, simulation-ready Warhammer 40k unit data with all the detail needed for accurate game modeling and tactical analysis. 

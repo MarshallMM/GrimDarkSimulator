@@ -170,7 +170,39 @@ type WeaponProfile struct {
 
 func main() {
 	unitName := flag.String("unit", "Brutalis Dreadnought", "Name of the unit to extract")
+	combineMode := flag.Bool("combine", false, "Combine two units: input1.yaml input2.yaml output.yaml")
+	showHelp := flag.Bool("help", false, "Show usage information")
 	flag.Parse()
+
+	if *showHelp {
+		fmt.Println("Library Builder - Warhammer 40k Unit Extractor")
+		fmt.Println()
+		fmt.Println("Usage:")
+		fmt.Println("  Extract a unit from BattleScribe data:")
+		fmt.Println("    go run main.go --unit \"Unit Name\"")
+		fmt.Println()
+		fmt.Println("  Combine two existing library units:")
+		fmt.Println("    go run main.go --combine input1.yaml input2.yaml output.yaml")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  go run main.go --unit \"Captain with Jump Pack\"")
+		fmt.Println("  go run main.go --combine captain_with_jump_pack.yaml bladeguard_veteran_squad.yaml combined_force.yaml")
+		fmt.Println()
+		return
+	}
+
+	// Check if we're combining units
+	if *combineMode {
+		args := flag.Args()
+		if len(args) != 3 {
+			log.Fatalf("Combine mode requires exactly 3 arguments: input1.yaml input2.yaml output.yaml")
+		}
+		err := combineUnitFiles(args[0], args[1], args[2])
+		if err != nil {
+			log.Fatalf("Error combining units: %v", err)
+		}
+		return
+	}
 
 	fmt.Printf("Extracting unit: %s\n", *unitName)
 
@@ -287,13 +319,51 @@ func processSelectionEntry(entry *SelectionEntry, catalog *Catalogue) *UnitData 
 	unit.Keywords = extractKeywords(entry.CategoryLinks, catalog.CategoryEntries)
 
 	// Extract abilities from rules and profiles
-	unit.Abilities = extractAbilities(entry.Rules, entry.InfoLinks, catalog)
+	abilitiesFromRules := extractAbilities(entry.Rules, entry.InfoLinks, catalog)
+	abilitiesFromProfiles := extractAbilitiesFromProfiles(entry.Profiles)
+
+	// Combine and deduplicate abilities
+	abilityMap := make(map[string]bool)
+	for _, ability := range abilitiesFromRules {
+		abilityMap[ability] = true
+	}
+	for _, ability := range abilitiesFromProfiles {
+		abilityMap[ability] = true
+	}
+
+	unit.Abilities = []string{}
+	for ability := range abilityMap {
+		unit.Abilities = append(unit.Abilities, ability)
+	}
+	sort.Strings(unit.Abilities)
 
 	// Extract unit stats from profiles
 	extractUnitStats(unit, entry.Profiles)
 
 	// Process models and loadouts
 	processModelsAndLoadouts(unit, entry, catalog)
+
+	// After all processing is done, add invulnerable save to model stats if the unit has one
+	for _, ability := range unit.Abilities {
+		if strings.Contains(strings.ToLower(ability), "invulnerable save") {
+			// Extract the save value from the ability (e.g., "Invulnerable Save (4+)" -> "4+")
+			if strings.Contains(ability, "(") && strings.Contains(ability, ")") {
+				start := strings.Index(ability, "(") + 1
+				end := strings.Index(ability, ")")
+				if start < end {
+					invulnSave := ability[start:end]
+					// Add ISV to all models in the unit
+					for i := range unit.Models {
+						if unit.Models[i].Stats == nil {
+							unit.Models[i].Stats = make(map[string]string)
+						}
+						unit.Models[i].Stats["ISV"] = invulnSave
+					}
+				}
+			}
+			break // Only process the first invulnerable save ability found
+		}
+	}
 
 	return unit
 }
@@ -350,18 +420,118 @@ func extractAbilities(rules []Rule, infoLinks []InfoLink, catalog *Catalogue) []
 	// Extract from local rules
 	for _, rule := range rules {
 		if rule.Hidden != "true" && rule.Name != "" {
-			abilities = append(abilities, rule.Name)
+			ability := rule.Name
+			// Check if the description contains a save value (like "4+")
+			if strings.Contains(strings.ToLower(rule.Name), "invulnerable") && rule.Description != "" {
+				// Look for save values in the description with flexible pattern matching
+				desc := rule.Description
+				if strings.Contains(desc, "4+") || desc == "4+" {
+					ability = rule.Name + " (4+)"
+				} else if strings.Contains(desc, "5+") || desc == "5+" {
+					ability = rule.Name + " (5+)"
+				} else if strings.Contains(desc, "3+") || desc == "3+" {
+					ability = rule.Name + " (3+)"
+				} else if strings.Contains(desc, "6+") || desc == "6+" {
+					ability = rule.Name + " (6+)"
+				} else if strings.Contains(desc, "2+") || desc == "2+" {
+					ability = rule.Name + " (2+)"
+				}
+			}
+			abilities = append(abilities, ability)
 		}
 	}
 
 	// Extract from info links (references to shared rules)
 	for _, link := range infoLinks {
 		if link.Hidden != "true" && link.Name != "" {
-			abilities = append(abilities, link.Name)
+			ability := link.Name
+			// Try to find the referenced rule in shared rules to get its description
+			for _, sharedRule := range catalog.SharedRules {
+				if sharedRule.ID == link.TargetId && sharedRule.Description != "" {
+					// Check if this is an invulnerable save with a value
+					if strings.Contains(strings.ToLower(link.Name), "invulnerable") {
+						desc := sharedRule.Description
+						if strings.Contains(desc, "4+") || desc == "4+" {
+							ability = link.Name + " (4+)"
+						} else if strings.Contains(desc, "5+") || desc == "5+" {
+							ability = link.Name + " (5+)"
+						} else if strings.Contains(desc, "3+") || desc == "3+" {
+							ability = link.Name + " (3+)"
+						} else if strings.Contains(desc, "6+") || desc == "6+" {
+							ability = link.Name + " (6+)"
+						} else if strings.Contains(desc, "2+") || desc == "2+" {
+							ability = link.Name + " (2+)"
+						}
+					}
+					break
+				}
+			}
+
+			// Also check shared profiles for invulnerable saves
+			if strings.Contains(strings.ToLower(link.Name), "invulnerable") {
+				for _, sharedProfile := range catalog.SharedProfiles {
+					if sharedProfile.ID == link.TargetId {
+						for _, char := range sharedProfile.Characteristics {
+							if strings.Contains(strings.ToLower(char.Name), "description") {
+								desc := char.Value
+								if strings.Contains(desc, "4+") || desc == "4+" {
+									ability = link.Name + " (4+)"
+								} else if strings.Contains(desc, "5+") || desc == "5+" {
+									ability = link.Name + " (5+)"
+								} else if strings.Contains(desc, "3+") || desc == "3+" {
+									ability = link.Name + " (3+)"
+								} else if strings.Contains(desc, "6+") || desc == "6+" {
+									ability = link.Name + " (6+)"
+								} else if strings.Contains(desc, "2+") || desc == "2+" {
+									ability = link.Name + " (2+)"
+								}
+								break
+							}
+						}
+						break
+					}
+				}
+			}
+
+			abilities = append(abilities, ability)
 		}
 	}
 
 	sort.Strings(abilities)
+	return abilities
+}
+
+// New function to extract abilities from profiles as well
+func extractAbilitiesFromProfiles(profiles []Profile) []string {
+	var abilities []string
+
+	for _, profile := range profiles {
+		if profile.TypeName == "Abilities" && profile.Hidden != "true" {
+			ability := profile.Name
+			// Check if this is an invulnerable save ability
+			if strings.Contains(strings.ToLower(profile.Name), "invulnerable") {
+				for _, char := range profile.Characteristics {
+					if strings.Contains(strings.ToLower(char.Name), "description") {
+						desc := char.Value
+						if strings.Contains(desc, "4+") || desc == "4+" {
+							ability = profile.Name + " (4+)"
+						} else if strings.Contains(desc, "5+") || desc == "5+" {
+							ability = profile.Name + " (5+)"
+						} else if strings.Contains(desc, "3+") || desc == "3+" {
+							ability = profile.Name + " (3+)"
+						} else if strings.Contains(desc, "6+") || desc == "6+" {
+							ability = profile.Name + " (6+)"
+						} else if strings.Contains(desc, "2+") || desc == "2+" {
+							ability = profile.Name + " (2+)"
+						}
+						break
+					}
+				}
+			}
+			abilities = append(abilities, ability)
+		}
+	}
+
 	return abilities
 }
 
@@ -921,4 +1091,92 @@ func writeUnitYAML(unit *UnitData, filename string) error {
 	}
 
 	return ioutil.WriteFile(filename, data, 0644)
+}
+
+func combineUnitFiles(unit1Path, unit2Path, outputPath string) error {
+	// Read and parse first unit
+	unit1Data, err := ioutil.ReadFile(filepath.Join("library", unit1Path))
+	if err != nil {
+		return fmt.Errorf("error reading %s: %v", unit1Path, err)
+	}
+
+	var unit1 UnitData
+	err = yaml.Unmarshal(unit1Data, &unit1)
+	if err != nil {
+		return fmt.Errorf("error parsing %s: %v", unit1Path, err)
+	}
+
+	// Read and parse second unit
+	unit2Data, err := ioutil.ReadFile(filepath.Join("library", unit2Path))
+	if err != nil {
+		return fmt.Errorf("error reading %s: %v", unit2Path, err)
+	}
+
+	var unit2 UnitData
+	err = yaml.Unmarshal(unit2Data, &unit2)
+	if err != nil {
+		return fmt.Errorf("error parsing %s: %v", unit2Path, err)
+	}
+
+	// Create combined unit
+	combined := UnitData{
+		Name: unit1.Name + " + " + unit2.Name,
+		Type: "combined",
+		Cost: unit1.Cost + unit2.Cost,
+	}
+
+	// Combine abilities (deduplicated)
+	abilityMap := make(map[string]bool)
+	for _, ability := range unit1.Abilities {
+		abilityMap[ability] = true
+	}
+	for _, ability := range unit2.Abilities {
+		abilityMap[ability] = true
+	}
+	combined.Abilities = []string{}
+	for ability := range abilityMap {
+		combined.Abilities = append(combined.Abilities, ability)
+	}
+	sort.Strings(combined.Abilities)
+
+	// Combine keywords (deduplicated)
+	keywordMap := make(map[string]bool)
+	for _, keyword := range unit1.Keywords {
+		keywordMap[keyword] = true
+	}
+	for _, keyword := range unit2.Keywords {
+		keywordMap[keyword] = true
+	}
+	combined.Keywords = []string{}
+	for keyword := range keywordMap {
+		combined.Keywords = append(combined.Keywords, keyword)
+	}
+	sort.Strings(combined.Keywords)
+
+	// Combine models
+	combined.Models = append(combined.Models, unit1.Models...)
+	combined.Models = append(combined.Models, unit2.Models...)
+
+	// Combine loadout options
+	combined.LoadoutOptions = append(combined.LoadoutOptions, unit1.LoadoutOptions...)
+	combined.LoadoutOptions = append(combined.LoadoutOptions, unit2.LoadoutOptions...)
+
+	// Write combined unit to output file
+	outputFile := filepath.Join("library", outputPath)
+	err = writeUnitYAML(&combined, outputFile)
+	if err != nil {
+		return fmt.Errorf("error writing combined unit: %v", err)
+	}
+
+	fmt.Printf("Combined units written to: %s\n", outputFile)
+	fmt.Printf("\nCombined Unit Summary:\n")
+	fmt.Printf("  Name: %s\n", combined.Name)
+	fmt.Printf("  Type: %s\n", combined.Type)
+	fmt.Printf("  Cost: %d\n", combined.Cost)
+	fmt.Printf("  Models: %d\n", len(combined.Models))
+	fmt.Printf("  Loadout Options: %d\n", len(combined.LoadoutOptions))
+	fmt.Printf("  Abilities: %d\n", len(combined.Abilities))
+	fmt.Printf("  Keywords: %d\n", len(combined.Keywords))
+
+	return nil
 }

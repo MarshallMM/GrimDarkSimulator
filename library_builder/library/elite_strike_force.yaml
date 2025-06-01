@@ -1,16 +1,21 @@
-name: Captain with Jump Pack
-type: model
-cost: 85
+name: Captain with Jump Pack + Brutalis Dreadnought
+type: combined
+cost: 245
 abilities:
 - Angel's Wrath
+- Brutalis Charge
+- 'Damaged: 1-4 Wounds Remaining'
+- Deadly Demise
 - Deep Strike
 - Invulnerable Save (4+)
 - Leader
 - Oath of Moment
 - Rites of Battle
 keywords:
+- Brutalis Dreadnought
 - Captain
 - Character
+- Dreadnought
 - 'Faction: Adeptus Astartes'
 - Fly
 - Grenades
@@ -18,6 +23,8 @@ keywords:
 - Infantry
 - Jump Pack
 - Tacticus
+- Vehicle
+- Walker
 models:
 - name: Captain with Jump Pack
   count: 1
@@ -105,7 +112,7 @@ models:
       type: Ranged Weapons
       A: "1"
       AP: "-1"
-      BS: 2+
+      BS: 3+
       D: "1"
       Keywords: Pistol
       Range: 18"
@@ -123,10 +130,10 @@ models:
     Master-crafted Power Weapon:
       name: Master-crafted Power Weapon
       type: Melee Weapons
-      A: "5"
+      A: "4"
       AP: "-2"
       D: "2"
-      Keywords: '-'
+      Keywords: Precision
       Range: Melee
       S: "5"
       WS: 2+
@@ -143,26 +150,120 @@ models:
     Power Fist:
       name: Power Fist
       type: Melee Weapons
-      A: "5"
+      A: "2"
       AP: "-2"
       D: "2"
       Keywords: '-'
       Range: Melee
       S: "8"
-      WS: 2+
+      WS: 3+
     Thunder Hammer:
       name: Thunder Hammer
       type: Melee Weapons
-      A: "5"
+      A: "3"
       AP: "-2"
       D: "2"
       Keywords: Devastating Wounds
       Range: Melee
       S: "8"
-      WS: 3+
+      WS: 4+
+- name: Brutalis Dreadnought
+  count: 1
+  stats:
+    LD: 6+
+    M: 8"
+    OC: "4"
+    SV: 2+
+    T: "10"
+    W: "12"
+  loadouts:
+    Bolt Rifle:
+      name: Bolt Rifle
+      type: Ranged Weapons
+      A: "2"
+      AP: "-1"
+      BS: 3+
+      D: "1"
+      Keywords: '-'
+      Range: 24"
+      S: "4"
+    Heavy Bolter:
+      name: Heavy Bolter
+      type: Ranged Weapons
+      A: "3"
+      AP: "-1"
+      BS: 4+
+      D: "2"
+      Keywords: Heavy, Sustained Hits 1
+      Range: 36"
+      S: "5"
+    Ironhail Heavy Stubber:
+      name: Ironhail Heavy Stubber
+      type: Ranged Weapons
+      A: "3"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Rapid Fire 3
+      Range: 36"
+      S: "4"
+    Multi-melta:
+      name: Multi-melta
+      type: Ranged Weapons
+      A: "2"
+      AP: "-4"
+      BS: 3+
+      D: D6
+      Keywords: Melta 2
+      Range: 18"
+      S: "9"
+    Twin Heavy Bolter:
+      name: Twin Heavy Bolter
+      type: Ranged Weapons
+      A: "3"
+      AP: "-1"
+      BS: 3+
+      D: "2"
+      Keywords: Sustained Hits 1, Twin-linked
+      Range: 36"
+      S: "5"
+    Twin Icarus Ironhail Heavy Stubber:
+      name: Twin Icarus Ironhail Heavy Stubber
+      type: Ranged Weapons
+      A: "3"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Anti-FLY 4+, Rapid Fire 3, Twin-linked
+      Range: 36"
+      S: "4"
+    Twin Multi-melta:
+      name: Twin Multi-melta
+      type: Ranged Weapons
+      A: "2"
+      AP: "-4"
+      BS: 3+
+      D: D6
+      Keywords: Melta 2, Twin-linked
+      Range: 18"
+      S: "9"
 loadout_options:
 - name: Wargear
   type: group
   options:
   - Melee and Pistol
   - Thunder Hammer and Relic Shield
+- name: Melee Weapon Option
+  type: group
+  options:
+  - Brutalis Fists & Brutalis Bolt Rifles
+  - Brutalis Talons
+- name: Ranged Weapon Option
+  type: group
+  options:
+  - Twin Heavy Bolter
+  - Twin Multi-melta
+- name: Wargear
+  type: group
+  options:
+  - Twin Icarus Ironhail Heavy Stubber

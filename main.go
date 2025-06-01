@@ -9,40 +9,63 @@ import (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	attacker := "bladeguard_veterans.yaml"
+	attacker := "captain_with_jump_pack.yaml"
 	var conflict UnitAttackSequence
 
 	defenderFiles := []struct {
 		name string
 		file string
 	}{
-		{"Bladeguard", "bladeguard_veterans.yaml"},
-		// Add more defenders here, e.g. {"Marines", "GenericT4.yaml"}, etc.
+		{"Bladeguard Squad", "bladeguard_veteran_squad.yaml"},
 	}
 
+	fmt.Printf("Testing unit loading and loadout attack functionality...\n\n")
+
+	// Test loading the attacker
+	fmt.Printf("Loading attacker: %s\n", attacker)
+	conflict.Attacker = loadUnit(attacker)
+	conflict.Attacker.PrintInfo()
+	fmt.Printf("\n")
+
 	for _, def := range defenderFiles {
-		conflict.Defender = loadUnit("/" + def.file)
-		conflict.Attacker = loadUnit("/" + attacker)
+		fmt.Printf("=== Testing attack against %s (%s) ===\n", def.name, def.file)
+		conflict.Defender = loadUnit(def.file)
+
+		// Test a single complete attack sequence (hits + wounds + saves + damage)
+		fmt.Printf("\n--- Complete Attack Sequence Test ---\n")
+		damage := conflict.loadoutAttackWithWounds()
+		fmt.Printf("Total damage applied: %d\n\n", damage)
+
+		// Run simulation for statistics
 		x2, y2 := conflict.damageSim()
-		fmt.Printf("%s: 68th: %v, 95th: %v\n", def.name, x2, y2)
+		fmt.Printf("%s: 68th: %v, 95th: %v\n\n", def.name, x2, y2)
 	}
 }
 
 func (conflict *UnitAttackSequence) damageSim() (int, int) {
 	var numbers []int
-	nSim := 1000
+	nSim := 100 // Reduced for initial testing
 
 	for i := 0; i < nSim; i++ {
-		woundsDealt := 0
+		// Initialize logger only for the first run
+		if i == 0 {
+			initLogger()
+			defer closeLogger()
+		}
+
+		damage := 0
 		conflict.Defender.Reload()
 		conflict.Attacker.Reload()
-		// Simulate a single attack sequence here (stub)
-		// You should call your actual attack logic here
-		// For now, just sum up killed models for percentile calc
-		for _, modelDetails := range conflict.Defender.Models {
-			woundsDealt += modelDetails.Killed * modelDetails.Wounds
+
+		// Use the complete attack sequence with saves and damage
+		damage = conflict.loadoutAttackWithWounds()
+		numbers = append(numbers, damage)
+
+		// Disable logger after first run
+		if i == 0 {
+			combatLogger.Sync()
+			combatLogger = nil
 		}
-		numbers = append(numbers, woundsDealt)
 	}
 
 	sort.Ints(numbers)

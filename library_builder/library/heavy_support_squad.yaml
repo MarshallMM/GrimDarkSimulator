@@ -1,16 +1,22 @@
-name: Brutalis Dreadnought
-type: model
-cost: 160
+name: Brutalis Dreadnought + Bladeguard Veteran Squad
+type: combined
+cost: 240
 abilities:
+- Bladeguard
 - Brutalis Charge
 - 'Damaged: 1-4 Wounds Remaining'
 - Deadly Demise
+- Invulnerable Save (4+)
 - Oath of Moment
 keywords:
+- Bladeguard Veteran Squad
 - Brutalis Dreadnought
 - Dreadnought
 - 'Faction: Adeptus Astartes'
+- Grenades
 - Imperium
+- Infantry
+- Tacticus
 - Vehicle
 - Walker
 models:
@@ -94,6 +100,98 @@ models:
       Keywords: Melta 2, Twin-linked
       Range: 18"
       S: "9"
+- name: Bladeguard Veteran
+  count: 1
+  stats:
+    ISV: 4+
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "3"
+  loadouts:
+    Heavy Bolt Pistol:
+      name: Heavy Bolt Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "-1"
+      BS: 3+
+      D: "1"
+      Keywords: Pistol
+      Range: 18"
+      S: "4"
+    Master-crafted Power Weapon:
+      name: Master-crafted Power Weapon
+      type: Melee Weapons
+      A: "6"
+      AP: "-2"
+      D: "2"
+      Keywords: Precision
+      Range: Melee
+      S: "5"
+      WS: 2+
+- name: Bladeguard Veteran Sergeant
+  count: 1
+  stats:
+    ISV: 4+
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "3"
+  loadouts:
+    ➤ Plasma Pistol - Standard:
+      name: ➤ Plasma Pistol - Standard
+      type: Ranged Weapons
+      A: "1"
+      AP: "-2"
+      BS: 3+
+      D: "1"
+      Keywords: Pistol
+      Range: 12"
+      S: "7"
+    ➤ Plasma Pistol - Supercharge:
+      name: ➤ Plasma Pistol - Supercharge
+      type: Ranged Weapons
+      A: "1"
+      AP: "-3"
+      BS: 3+
+      D: "2"
+      Keywords: Hazardous, Pistol
+      Range: 12"
+      S: "8"
+    Heavy Bolt Pistol:
+      name: Heavy Bolt Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "-1"
+      BS: 3+
+      D: "1"
+      Keywords: Pistol
+      Range: 18"
+      S: "4"
+    Master-crafted Power Weapon:
+      name: Master-crafted Power Weapon
+      type: Melee Weapons
+      A: "6"
+      AP: "-2"
+      D: "2"
+      Keywords: Precision
+      Range: Melee
+      S: "5"
+      WS: 2+
+    Neo-volkite Pistol:
+      name: Neo-volkite Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 3+
+      D: "2"
+      Keywords: Devastating Wounds, Pistol
+      Range: 12"
+      S: "5"
 loadout_options:
 - name: Melee Weapon Option
   type: group
