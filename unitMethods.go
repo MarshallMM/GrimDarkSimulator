@@ -14,6 +14,7 @@ import (
 
 const _unitLibraryFilepath = "./library/"
 const _heavyComments = true
+const _numSimulations = 1000
 
 // Global logger
 var combatLogger *zap.Logger
@@ -182,88 +183,47 @@ func loadUnit(name string) Unit {
 	return unit
 }
 
-func (u *Unit) PrintInfo() {
-	if _heavyComments {
-		fmt.Printf("Unit: %s | Cost: %d | Type: %s\n", u.Name, u.Cost, u.Type)
-		fmt.Printf("Abilities: %v\n", u.Abilities)
-		fmt.Printf("Keywords: %v\n", u.Keywords)
-
-		for i, model := range u.Models {
-			fmt.Printf("Model[%d]: %s | Count: %d | Killed: %d | Wounds: %d\n",
-				i, model.Name, model.Count, model.Killed, model.CarryOverWounds)
-			fmt.Printf("  Stats: %v\n", model.Stats)
-
-			if model.Loadouts != nil {
-				for weaponName, weapon := range model.Loadouts {
-					fmt.Printf("  Weapon: %s | Type: %s | Characteristics: %v\n",
-						weaponName, weapon.Type, weapon.Characteristics)
-				}
-			}
-		}
-	}
-}
-
-func (u *Unit) calcToughness() int {
-	toughness := 0
-	// Iterate through models and get highest toughness
-	for _, model := range u.Models {
-		if model.Count > model.Killed {
-			// Check if model is not a leader (for bodyguard units)
-			isLeader := false
-			for _, ability := range u.Abilities {
-				if strings.Contains(strings.ToLower(ability), "leader") {
-					isLeader = true
-					break
-				}
-			}
-
-			if !isLeader {
-				if tStr, exists := model.Stats["T"]; exists {
-					if t, err := strconv.Atoi(tStr); err == nil && toughness < t {
-						toughness = t
-					}
-				}
-			}
-		}
-	}
-	return toughness
-}
-
-func (u *Unit) removeAbility(ability2remove string) bool {
-	used := false
-	for i, ability := range u.UnitAbilities {
-		if ability == ability2remove {
-			u.UnitAbilities = remove(u.UnitAbilities, i)
-			used = true
-			break
-		}
-	}
-	// Also remove from main abilities list
-	for i, ability := range u.Abilities {
-		if ability == ability2remove {
-			u.Abilities = remove(u.Abilities, i)
-			break
-		}
-	}
-	return used
-}
-
-func (conflict *UnitAttackSequence) applyDamage(modelIndex int, damString string, params ...string) {
+func (conflict *UnitAttackSequence) applyDamage(modelIndex int, damString string, params ...string) int {
 	var (
-		err     error
-		damage  int
-		mortals bool
+		err         error
+		damage      int
+		mortals     bool
+		devastating bool
 	)
 	if exists, _ := stringExistsInSlice("mortal", params); exists {
 		mortals = true
 	}
+	if exists, _ := stringExistsInSlice("devastating", params); exists {
+		devastating = true
+	}
 
-	if damage, err = rollAndAdd(damString); err != nil {
-		fmt.Println(err)
+	// Handle damage string parsing
+	damString = strings.TrimSpace(damString)
+	if damString == "" {
+		damString = "1" // Default to 1 damage if empty
+	}
+
+	// Handle dice notation
+	if strings.Contains(strings.ToLower(damString), "d") {
+		// Handle D6, 2D6, etc.
+		diceStr := strings.ToLower(damString)
+		if strings.HasPrefix(diceStr, "d") {
+			diceStr = "1" + diceStr // Convert "D6" to "1D6"
+		}
+		if damage, err = rollAndAdd(diceStr); err != nil {
+			fmt.Printf("Error rolling damage dice '%s': %v\n", diceStr, err)
+			damage = 1 // Default to 1 damage on error
+		}
+	} else {
+		// Handle numeric damage
+		if damage, err = strconv.Atoi(damString); err != nil {
+			fmt.Printf("Error parsing damage '%s': %v\n", damString, err)
+			damage = 1 // Default to 1 damage on error
+		}
 	}
 
 	if modelIndex >= len(conflict.Defender.Models) {
-		return
+		return 0
 	}
 
 	model := &conflict.Defender.Models[modelIndex]
@@ -310,14 +270,41 @@ func (conflict *UnitAttackSequence) applyDamage(modelIndex int, damString string
 		damage = int(math.Ceil(float64(damage) / 2))
 	}
 
+	// Calculate remaining health before applying damage
+	remainingHealth := model.Wounds - model.CarryOverWounds
+	aliveModels := model.Count - model.Killed
+
 	model.CarryOverWounds = model.CarryOverWounds + damage
 	if model.CarryOverWounds >= model.Wounds && model.Killed < model.Count {
 		model.Killed++
 		model.CarryOverWounds = 0
 	}
 
+	// Calculate new remaining health
+	newRemainingHealth := model.Wounds - model.CarryOverWounds
+	newAliveModels := model.Count - model.Killed
+
+	// Log health changes
+	if combatLogger != nil {
+		combatLogger.Info("Damage Applied",
+			zap.Int("damage_amount", damage),
+			zap.String("damage_characteristic", damString),
+			zap.Int("target_model_index", modelIndex),
+			zap.String("target_model_name", model.Name),
+			zap.Int("previous_health", remainingHealth),
+			zap.Int("new_health", newRemainingHealth),
+			zap.Int("previous_alive_models", aliveModels),
+			zap.Int("new_alive_models", newAliveModels),
+			zap.Int("total_wounds", model.Wounds),
+			zap.Int("total_models", model.Count),
+			zap.Bool("devastating_wound", devastating),
+			zap.Bool("mortal_wound", mortals))
+	}
+
 	// Update the model in the slice
 	conflict.Defender.Models[modelIndex] = *model
+
+	return damage
 }
 
 func (u *Unit) Reload() {
@@ -401,11 +388,21 @@ func (w *WeaponProfile) GetStringCharacteristic(name string) string {
 }
 
 // Enhanced loadout attack method that includes wound rolling and saves
-func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
+func (conflict *UnitAttackSequence) loadoutAttackSequence() (map[string]int, int) {
 	// Apply abilities and weapon modifications at start of combat
 	conflict.applyAbilities()
 
 	totalDamage := 0
+	damageByLoadout := make(map[string]int)
+
+	// Initialize damage tracking for all weapons to 0
+	for _, model := range conflict.Attacker.Models {
+		if model.Loadouts != nil {
+			for weaponName := range model.Loadouts {
+				damageByLoadout[weaponName] = 0
+			}
+		}
+	}
 
 	// Find the first alive model in the defender for targeting
 	var targetModel *ModelData
@@ -419,18 +416,23 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 	}
 
 	if targetModel == nil {
-		fmt.Printf("No alive models to target\n")
-		return 0
+		if combatLogger != nil {
+			combatLogger.Info("No alive models to target")
+		}
+		return damageByLoadout, 0
 	}
 
-	fmt.Printf("Targeting: %s (T%s, SV%s", targetModel.Name, targetModel.Stats["T"], targetModel.Stats["SV"])
-	if isvStr, hasISV := targetModel.Stats["ISV"]; hasISV {
-		fmt.Printf(", ISV%s", isvStr)
+	if combatLogger != nil {
+		combatLogger.Info("########################################")
+		combatLogger.Info(fmt.Sprintf("Targeting model: %s (T%s, SV%s, ISV%s)",
+			targetModel.Name,
+			targetModel.Stats["T"],
+			targetModel.Stats["SV"],
+			targetModel.Stats["ISV"]))
 	}
-	fmt.Printf(")\n")
 
 	// Iterate through all models in the attacker
-	for modelIndex, model := range conflict.Attacker.Models {
+	for _, model := range conflict.Attacker.Models {
 		// Skip killed models
 		if model.Killed >= model.Count {
 			continue
@@ -441,16 +443,43 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 
 		// Iterate through each loadout/weapon for this model
 		if model.Loadouts != nil {
-			for weaponName, weapon := range model.Loadouts {
-				fmt.Printf("Model %d (%s) attacking with %s\n", modelIndex, model.Name, weaponName)
+			// First, check if this model has loadout options
+			var weaponsToUse []string
+			if len(conflict.Attacker.LoadoutOptions) > 0 {
+				// If there are loadout options, use those
+				for _, option := range conflict.Attacker.LoadoutOptions {
+					if option.Type == "group" {
+						weaponsToUse = option.Options
+						break
+					}
+				}
+			}
 
-				// Log weapon attack start
+			// If no loadout options found, use all weapons
+			if len(weaponsToUse) == 0 {
+				for weaponName := range model.Loadouts {
+					weaponsToUse = append(weaponsToUse, weaponName)
+				}
+			}
+
+			// Now process each weapon in the loadout
+			for _, weaponName := range weaponsToUse {
+				weapon, exists := model.Loadouts[weaponName]
+				if !exists {
+					continue
+				}
+
+				// Add visual separator for new weapon attack
 				if combatLogger != nil {
-					combatLogger.Info("Starting weapon attack",
-						zap.String("attacker_model", model.Name),
-						zap.String("weapon_name", weaponName),
-						zap.String("weapon_type", weapon.Type),
-						zap.String("target_model", targetModel.Name))
+					combatLogger.Info(fmt.Sprintf("Starting attack with %s (%s)", weaponName, model.Name))
+					combatLogger.Info("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv")
+				}
+
+				if combatLogger != nil {
+					combatLogger.Info(fmt.Sprintf("Starting weapon attack: %s (%s) targeting %s",
+						weaponName,
+						weapon.Type,
+						targetModel.Name))
 				}
 
 				// Get number of attacks
@@ -470,17 +499,30 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 						if attacksDice, err := rollAndAdd(diceStr); err == nil {
 							attacks = attacksDice
 						} else {
-							fmt.Printf("  Could not parse attacks '%s', skipping\n", attacksStr)
+							if combatLogger != nil {
+								combatLogger.Warn(fmt.Sprintf("Could not parse attacks '%s': %v", attacksStr, err))
+							}
 							continue
 						}
 					}
 				} else {
-					fmt.Printf("  No attacks found for weapon, skipping\n")
+					if combatLogger != nil {
+						combatLogger.Warn("No attacks found for weapon, skipping")
+					}
 					continue
 				}
 
 				// Calculate total attacks (attacks per weapon * number of alive models)
 				totalAttacks := attacks * aliveCount
+
+				// Log attack count
+				if combatLogger != nil {
+					combatLogger.Info(fmt.Sprintf("Attack Count: %s - %s attacks, %d alive models, %d total attacks",
+						weaponName,
+						attacksStr,
+						aliveCount,
+						totalAttacks))
+				}
 
 				// PHASE 1: Roll for hits
 				hits := 0
@@ -493,15 +535,10 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 
 				if isTorrent {
 					// Torrent weapons auto-hit
-					fmt.Printf("  %d attacks, auto-hit (Torrent)\n", totalAttacks)
-					hits = totalAttacks
-
 					if combatLogger != nil {
-						combatLogger.Info("Hit Phase - Torrent",
-							zap.Int("total_attacks", totalAttacks),
-							zap.Bool("auto_hit", true),
-							zap.Int("total_hits", hits))
+						combatLogger.Info(fmt.Sprintf("Hit Phase - Torrent: %d attacks auto-hit", totalAttacks))
 					}
+					hits = totalAttacks
 				} else {
 					// Get skill value (BS for ranged, WS for melee)
 					var skillStr string
@@ -510,7 +547,9 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 					} else if strings.Contains(strings.ToLower(weapon.Type), "melee") {
 						skillStr = weapon.GetStringCharacteristic("WS")
 					} else {
-						fmt.Printf("  Unknown weapon type '%s', assuming ranged\n", weapon.Type)
+						if combatLogger != nil {
+							combatLogger.Warn(fmt.Sprintf("Unknown weapon type '%s', assuming ranged", weapon.Type))
+						}
 						skillStr = weapon.GetStringCharacteristic("BS")
 					}
 
@@ -522,11 +561,15 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 						if skill, err := strconv.Atoi(skillStr); err == nil {
 							skillValue = skill
 						} else {
-							fmt.Printf("  Could not parse skill '%s', skipping\n", skillStr)
+							if combatLogger != nil {
+								combatLogger.Warn(fmt.Sprintf("Could not parse skill '%s': %v", skillStr, err))
+							}
 							continue
 						}
 					} else {
-						fmt.Printf("  No skill value found for weapon, skipping\n")
+						if combatLogger != nil {
+							combatLogger.Warn("No skill value found for weapon, skipping")
+						}
 						continue
 					}
 
@@ -539,15 +582,12 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 						finalSkill = 6 // Maximum hit on 6+
 					}
 
-					fmt.Printf("  %d attacks, need %d+ to hit (base %d+ with %+d modifier)\n",
-						totalAttacks, finalSkill, skillValue, weapon.Modifiers.HitMod)
-
 					if combatLogger != nil {
-						combatLogger.Info("Hit Phase - Rolling",
-							zap.Int("total_attacks", totalAttacks),
-							zap.Int("hit_threshold", finalSkill),
-							zap.Int("base_skill", skillValue),
-							zap.Int("hit_modifier", weapon.Modifiers.HitMod))
+						combatLogger.Info(fmt.Sprintf("Hit Phase - Rolling: %d attacks, need %d+ to hit (base %d+ with %+d modifier)",
+							totalAttacks,
+							finalSkill,
+							skillValue,
+							weapon.Modifiers.HitMod))
 					}
 
 					// Roll for hits individually
@@ -556,6 +596,16 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 						hit := roll >= finalSkill
 						criticalHit := roll >= weapon.Modifiers.CritHit
 						rerolled := false
+
+						// Log initial hit roll
+						if combatLogger != nil {
+							combatLogger.Info(fmt.Sprintf("Initial Hit Roll: Attack %d rolled %d (need %d+), hit: %v, critical: %v",
+								i+1,
+								roll,
+								finalSkill,
+								hit,
+								criticalHit))
+						}
 
 						// Handle rerolls for misses
 						if !hit {
@@ -573,17 +623,33 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 								rerolled = true
 
 								if combatLogger != nil {
-									combatLogger.Info("Hit Reroll",
-										zap.Int("attack_number", i+1),
-										zap.Int("original_roll", roll),
-										zap.Int("reroll", rerollResult),
-										zap.Int("threshold", finalSkill),
-										zap.Bool("hit_after_reroll", hit),
-										zap.Bool("critical_after_reroll", criticalHit))
+									combatLogger.Info(fmt.Sprintf("Miss Reroll: Attack %d rerolled %d (original %d), hit: %v, critical: %v",
+										i+1,
+										rerollResult,
+										roll,
+										hit,
+										criticalHit))
 								}
 
 								roll = rerollResult // Update roll for logging
 							}
+						} else if weapon.Modifiers.CritHitFish && !criticalHit {
+							// Critical hit fishing: reroll successful hits that weren't critical
+							rerollResult := rollDice(1, 6)
+							hit = rerollResult >= finalSkill
+							criticalHit = rerollResult >= weapon.Modifiers.CritHit
+							rerolled = true
+
+							if combatLogger != nil {
+								combatLogger.Info(fmt.Sprintf("Critical Hit Fishing Reroll: Attack %d rerolled %d (original %d), hit: %v, critical: %v",
+									i+1,
+									rerollResult,
+									roll,
+									hit,
+									criticalHit))
+							}
+
+							roll = rerollResult // Update roll for logging
 						}
 
 						if hit {
@@ -591,56 +657,83 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 
 							// Handle critical hit effects
 							if criticalHit {
-								// Check for Lethal Hits
-								if strings.Contains(strings.ToLower(keywords), "lethal hits") {
-									lethalHits++
-								}
-
 								// Check for Sustained Hits
-								if strings.Contains(strings.ToLower(keywords), "sustained hits") {
-									// Parse sustained hits value - look for "sustained hits X"
-									keywordParts := strings.Fields(strings.ToLower(keywords))
-									for j, part := range keywordParts {
-										if part == "sustained" && j+2 < len(keywordParts) && keywordParts[j+1] == "hits" {
-											if sustainedValue, err := strconv.Atoi(keywordParts[j+2]); err == nil {
-												sustainedHits += sustainedValue
+								keywordsLower := strings.ToLower(keywords)
+								if strings.Contains(keywordsLower, "sustained hits") {
+									// Parse sustained hits value
+									// First split by commas, then by spaces
+									keywordGroups := strings.Split(keywordsLower, ",")
+									for _, group := range keywordGroups {
+										group = strings.TrimSpace(group)
+										if strings.Contains(group, "sustained hits") {
+											// Split the group into words
+											keywordParts := strings.Fields(group)
+											for j, part := range keywordParts {
+												if part == "sustained" && j+2 < len(keywordParts) && keywordParts[j+1] == "hits" {
+													// Handle both formats: "Sustained Hits 1" and "Sustained Hits D3"
+													sustainedValue := 1 // Default to 1 if not specified
+													if j+2 < len(keywordParts) {
+														sustainedStr := strings.TrimSpace(keywordParts[j+2])
+														if strings.HasPrefix(sustainedStr, "d") {
+															// Handle dice notation
+															if sustainedDice, err := rollAndAdd(sustainedStr); err == nil {
+																sustainedValue = sustainedDice
+															}
+														} else if val, err := strconv.Atoi(sustainedStr); err == nil {
+															sustainedValue = val
+														} else {
+															if combatLogger != nil {
+																combatLogger.Warn(fmt.Sprintf("Could not parse Sustained Hits value '%s'", sustainedStr))
+															}
+														}
+													}
+
+													if combatLogger != nil {
+														combatLogger.Info(fmt.Sprintf("Sustained Hits Found: Weapon has 'Sustained Hits %d' keyword (from '%s')",
+															sustainedValue,
+															keywords))
+													}
+
+													sustainedHits += sustainedValue
+													hits += sustainedValue
+
+													if combatLogger != nil {
+														combatLogger.Info(fmt.Sprintf("Sustained Hits Applied: Critical hit roll %d generated %d additional hits (total hits: %d)",
+															roll,
+															sustainedValue,
+															hits))
+													}
+													break
+												}
 											}
-											break
 										}
 									}
+								}
+
+								// Check for Lethal Hits
+								if strings.Contains(keywordsLower, "lethal hits") {
+									lethalHits++
 								}
 							}
 						}
 
 						if combatLogger != nil {
-							combatLogger.Info("Hit Roll",
-								zap.Int("attack_number", i+1),
-								zap.Int("roll", roll),
-								zap.Int("threshold", finalSkill),
-								zap.Bool("hit", hit),
-								zap.Bool("critical_hit", criticalHit),
-								zap.Bool("rerolled", rerolled),
-								zap.Int("running_hits", hits))
+							combatLogger.Info(fmt.Sprintf("Hit Roll Result: Attack %d final roll %d (need %d+), hit: %v, critical: %v, rerolled: %v, running hits: %d",
+								i+1,
+								roll,
+								finalSkill,
+								hit,
+								criticalHit,
+								rerolled,
+								hits))
 						}
 					}
 
-					// Add sustained hits to total
-					hits += sustainedHits
-
-					fmt.Printf("  Scored %d hits out of %d attacks", hits, totalAttacks)
-					if sustainedHits > 0 {
-						fmt.Printf(" (including %d Sustained Hits)", sustainedHits)
-					}
-					if lethalHits > 0 {
-						fmt.Printf(" (%d Lethal Hits auto-wound)", lethalHits)
-					}
-					fmt.Printf("\n")
-
 					if combatLogger != nil {
-						combatLogger.Info("Hit Phase Complete",
-							zap.Int("total_hits", hits),
-							zap.Int("sustained_hits", sustainedHits),
-							zap.Int("lethal_hits", lethalHits))
+						combatLogger.Info(fmt.Sprintf("Hit Phase Complete: %d hits (including %d Sustained Hits, %d Lethal Hits)",
+							hits,
+							sustainedHits,
+							lethalHits))
 					}
 				}
 
@@ -652,6 +745,7 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 				if wounds > 0 {
 					damageApplied = conflict.rollSaves(wounds, criticalWounds, weapon, targetModel, targetModelIndex)
 					totalDamage += damageApplied
+					damageByLoadout[weaponName] = damageApplied
 				}
 
 				// Log remaining defenders after damage
@@ -666,22 +760,21 @@ func (conflict *UnitAttackSequence) loadoutAttackSequence() int {
 						}
 					}
 
-					combatLogger.Info("Weapon Attack Complete",
-						zap.Int("damage_applied", damageApplied),
-						zap.Int("remaining_models", remainingModels),
-						zap.Int("remaining_wounds", totalWoundsRemaining))
+					combatLogger.Info(fmt.Sprintf("Weapon Attack Complete: Applied %d damage (cumulative: %d), %d models remaining with %d wounds",
+						damageApplied,
+						totalDamage,
+						remainingModels,
+						totalWoundsRemaining))
 				}
-
-				fmt.Printf("\n")
 			}
 		}
 	}
 
-	fmt.Printf("Total damage applied: %d\n", totalDamage)
 	if combatLogger != nil {
-		combatLogger.Info("Combat Complete", zap.Int("total_damage", totalDamage))
+		combatLogger.Info(fmt.Sprintf("Combat Complete: Total damage %d",
+			totalDamage))
 	}
-	return totalDamage
+	return damageByLoadout, totalDamage
 }
 
 // Wound rolling method with detailed logging for each roll
@@ -697,11 +790,17 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 		if s, err := strconv.Atoi(strengthStr); err == nil {
 			strength = s
 		} else {
-			fmt.Printf("  Could not parse weapon strength '%s'\n", strengthStr)
+			if combatLogger != nil {
+				combatLogger.Warn("Could not parse weapon strength",
+					zap.String("strength_string", strengthStr),
+					zap.Error(err))
+			}
 			return 0, 0
 		}
 	} else {
-		fmt.Printf("  No strength found for weapon\n")
+		if combatLogger != nil {
+			combatLogger.Warn("No strength found for weapon")
+		}
 		return 0, 0
 	}
 
@@ -712,11 +811,17 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 		if t, err := strconv.Atoi(toughnessStr); err == nil {
 			toughness = t
 		} else {
-			fmt.Printf("  Could not parse target toughness '%s'\n", toughnessStr)
+			if combatLogger != nil {
+				combatLogger.Warn("Could not parse target toughness",
+					zap.String("toughness_string", toughnessStr),
+					zap.Error(err))
+			}
 			return 0, 0
 		}
 	} else {
-		fmt.Printf("  No toughness found for target\n")
+		if combatLogger != nil {
+			combatLogger.Warn("No toughness found for target")
+		}
 		return 0, 0
 	}
 
@@ -743,12 +848,8 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 		finalWoundThreshold = 6 // Maximum wound on 6+
 	}
 
-	fmt.Printf("  Rolling %d hits to wound: S%d vs T%d, need %d+ (base %d+ with %+d modifier)",
-		hits, strength, toughness, finalWoundThreshold, woundThreshold, weapon.Modifiers.WoundMod)
-	if lethalHits > 0 {
-		fmt.Printf(" (%d Lethal Hits auto-wound)", lethalHits)
-	}
-	fmt.Printf("\n")
+	// Check if weapon has Devastating Wounds keyword
+	hasDevastatingWounds := strings.Contains(strings.ToLower(weapon.GetStringCharacteristic("Keywords")), "devastating wounds")
 
 	if combatLogger != nil {
 		combatLogger.Info("Wound Phase - Starting",
@@ -758,7 +859,8 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 			zap.Int("target_toughness", toughness),
 			zap.Int("wound_threshold", finalWoundThreshold),
 			zap.Int("base_threshold", woundThreshold),
-			zap.Int("wound_modifier", weapon.Modifiers.WoundMod))
+			zap.Int("wound_modifier", weapon.Modifiers.WoundMod),
+			zap.Bool("has_devastating_wounds", hasDevastatingWounds))
 	}
 
 	// Start with lethal hits that auto-wound
@@ -775,7 +877,7 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 	for i := 0; i < normalHits; i++ {
 		roll := rollDice(1, 6)
 		wound := roll >= finalWoundThreshold
-		criticalWound := roll >= weapon.Modifiers.CritWound
+		criticalWound := hasDevastatingWounds && roll >= weapon.Modifiers.CritWound
 		rerolled := false
 
 		// Handle rerolls for misses
@@ -790,7 +892,7 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 			if shouldReroll {
 				rerollResult := rollDice(1, 6)
 				wound = rerollResult >= finalWoundThreshold
-				criticalWound = rerollResult >= weapon.Modifiers.CritWound
+				criticalWound = hasDevastatingWounds && rerollResult >= weapon.Modifiers.CritWound
 				rerolled = true
 
 				if combatLogger != nil {
@@ -825,12 +927,6 @@ func (conflict *UnitAttackSequence) rollWounds(hits int, weapon WeaponProfile, t
 				zap.Int("running_wounds", wounds))
 		}
 	}
-
-	fmt.Printf("  Scored %d wounds out of %d hits", wounds, hits)
-	if criticalWounds > 0 {
-		fmt.Printf(" (%d Devastating Wounds bypass saves)", criticalWounds)
-	}
-	fmt.Printf("\n")
 
 	if combatLogger != nil {
 		combatLogger.Info("Wound Phase Complete",
@@ -888,13 +984,6 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 		}
 	}
 
-	fmt.Printf("  Rolling %d wounds for saves: SV %d+ (modified by AP-%d), ISV %d+",
-		wounds, sv, ap, isv)
-	if criticalWounds > 0 {
-		fmt.Printf(" (%d Devastating Wounds bypass saves)", criticalWounds)
-	}
-	fmt.Printf("\n")
-
 	if combatLogger != nil {
 		combatLogger.Info("Save Phase - Starting",
 			zap.Int("wounds", wounds),
@@ -906,23 +995,25 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 	}
 
 	savedWounds := 0
-	damageApplied := 0
+	devastatingDamage := 0
 
 	// Process critical wounds first (they bypass saves)
 	for i := 0; i < criticalWounds; i++ {
 		if combatLogger != nil {
 			combatLogger.Info("Devastating Wound",
 				zap.Int("wound_number", i+1),
-				zap.Bool("bypasses_save", true))
+				zap.Bool("bypasses_save", true),
+				zap.String("damage_characteristic", damageStr))
 		}
 
 		// Apply damage for Devastating Wound (no save allowed)
-		conflict.applyDamage(targetModelIndex, damageStr)
-		damageApplied++
+		damageAmount := conflict.applyDamage(targetModelIndex, damageStr, "devastating")
+		devastatingDamage += damageAmount
 
 		if combatLogger != nil {
-			combatLogger.Info("Damage Applied",
+			combatLogger.Info("Devastating Wound Damage Applied",
 				zap.String("damage_amount", damageStr),
+				zap.Int("actual_damage", damageAmount),
 				zap.Int("target_model_index", targetModelIndex),
 				zap.String("target_model_name", targetModel.Name),
 				zap.Bool("devastating_wound", true))
@@ -935,6 +1026,7 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 		normalWounds = 0
 	}
 
+	failedSaveDamage := 0
 	for i := 0; i < normalWounds; i++ {
 		roll := rollDice(1, 6)
 		saved := false
@@ -958,10 +1050,6 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 
 		if saved {
 			savedWounds++
-			if _heavyComments {
-				fmt.Printf("    Wound %d: Rolled %d, saved (%s save %d+)\n", i+1, roll, saveType, saveUsed)
-			}
-
 			if combatLogger != nil {
 				combatLogger.Info("Save Roll",
 					zap.Int("wound_number", i+1+criticalWounds),
@@ -971,10 +1059,6 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 					zap.Bool("saved", true))
 			}
 		} else {
-			if _heavyComments {
-				fmt.Printf("    Wound %d: Rolled %d, failed save\n", i+1, roll)
-			}
-
 			if combatLogger != nil {
 				combatLogger.Info("Save Roll",
 					zap.Int("wound_number", i+1+criticalWounds),
@@ -985,12 +1069,13 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 			}
 
 			// Apply damage for failed save
-			conflict.applyDamage(targetModelIndex, damageStr)
-			damageApplied++
+			damageAmount := conflict.applyDamage(targetModelIndex, damageStr)
+			failedSaveDamage += damageAmount
 
 			if combatLogger != nil {
-				combatLogger.Info("Damage Applied",
+				combatLogger.Info("Normal Wound Damage Applied",
 					zap.String("damage_amount", damageStr),
+					zap.Int("actual_damage", damageAmount),
 					zap.Int("target_model_index", targetModelIndex),
 					zap.String("target_model_name", targetModel.Name),
 					zap.Bool("devastating_wound", false))
@@ -998,18 +1083,17 @@ func (conflict *UnitAttackSequence) rollSaves(wounds int, criticalWounds int, we
 		}
 	}
 
-	fmt.Printf("  Saves: %d saved, %d damage applied (%d from Devastating Wounds, %d from failed saves)\n",
-		savedWounds, damageApplied, criticalWounds, damageApplied-criticalWounds)
+	totalDamageApplied := devastatingDamage + failedSaveDamage
 
 	if combatLogger != nil {
 		combatLogger.Info("Save Phase Complete",
-			zap.Int("total_damage_applied", damageApplied),
-			zap.Int("devastating_wound_damage", criticalWounds),
-			zap.Int("failed_save_damage", damageApplied-criticalWounds),
+			zap.Int("total_damage_applied", totalDamageApplied),
+			zap.Int("devastating_wound_damage", devastatingDamage),
+			zap.Int("failed_save_damage", failedSaveDamage),
 			zap.Int("wounds_saved", savedWounds))
 	}
 
-	return damageApplied
+	return totalDamageApplied
 }
 
 // Apply abilities and weapon keywords that modify combat characteristics
@@ -1034,19 +1118,15 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 						weaponsModified++
 
 						if combatLogger != nil {
-							combatLogger.Info("Applied Oath of Moment",
-								zap.String("ability", "Oath of Moment"),
-								zap.String("weapon_name", weaponName),
-								zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
-								zap.String("effect", "RerollHits = true"),
-								zap.Bool("previous_reroll_hits", false),
-								zap.Bool("new_reroll_hits", true))
+							combatLogger.Info(fmt.Sprintf("Applied Oath of Moment to %s (%s): RerollHits = true (was false)",
+								weaponName,
+								conflict.Attacker.Models[modelIndex].Name))
 						}
 					}
 				}
 			}
-			if _heavyComments {
-				fmt.Printf("Applied Oath of Moment: All weapons gain reroll hits (%d weapons modified)\n", weaponsModified)
+			if combatLogger != nil {
+				combatLogger.Info(fmt.Sprintf("Applied Oath of Moment: Modified %d weapons", weaponsModified))
 			}
 
 		case "stationary":
@@ -1062,20 +1142,17 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 						heavyWeaponsModified++
 
 						if combatLogger != nil {
-							combatLogger.Info("Applied Stationary",
-								zap.String("ability", "Stationary"),
-								zap.String("weapon_name", weaponName),
-								zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
-								zap.String("weapon_keywords", keywords),
-								zap.String("effect", "HitMod += 1"),
-								zap.Int("previous_hit_mod", previousHitMod),
-								zap.Int("new_hit_mod", weapon.Modifiers.HitMod))
+							combatLogger.Info(fmt.Sprintf("Applied Stationary to %s (%s): HitMod += 1 (was %d, now %d)",
+								weaponName,
+								conflict.Attacker.Models[modelIndex].Name,
+								previousHitMod,
+								weapon.Modifiers.HitMod))
 						}
 					}
 				}
 			}
-			if _heavyComments {
-				fmt.Printf("Applied Stationary: Heavy weapons gain +1 to hit (%d weapons modified)\n", heavyWeaponsModified)
+			if combatLogger != nil {
+				combatLogger.Info(fmt.Sprintf("Applied Stationary: Modified %d heavy weapons", heavyWeaponsModified))
 			}
 
 		case "rapid fire distance":
@@ -1100,20 +1177,12 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 											rapidFireWeaponsModified++
 
 											if combatLogger != nil {
-												combatLogger.Info("Applied Rapid Fire Distance",
-													zap.String("ability", "Rapid Fire Distance"),
-													zap.String("weapon_name", weaponName),
-													zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
-													zap.String("weapon_keywords", keywords),
-													zap.Int("rapid_fire_value", rapidFireValue),
-													zap.String("effect", fmt.Sprintf("Attacks += %d", rapidFireValue)),
-													zap.Int("previous_attacks", currentAttacks),
-													zap.Int("new_attacks", newAttacks))
-											}
-
-											if _heavyComments {
-												fmt.Printf("Applied Rapid Fire Distance: %s gains +%d attacks (%d → %d)\n",
-													weaponName, rapidFireValue, currentAttacks, newAttacks)
+												combatLogger.Info(fmt.Sprintf("Applied Rapid Fire Distance to %s (%s): Attacks += %d (was %d, now %d)",
+													weaponName,
+													conflict.Attacker.Models[modelIndex].Name,
+													rapidFireValue,
+													currentAttacks,
+													newAttacks))
 											}
 										}
 									}
@@ -1124,6 +1193,9 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 					}
 				}
 			}
+			if combatLogger != nil {
+				combatLogger.Info(fmt.Sprintf("Applied Rapid Fire Distance: Modified %d rapid fire weapons", rapidFireWeaponsModified))
+			}
 
 		case "red rampage":
 			// Red Rampage stratagem: Choose Lethal Hits OR Lance, or both with Battle-shocked
@@ -1131,6 +1203,15 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 			// In a real game, this would be a player choice during combat
 			// RED RAMPAGE ONLY AFFECTS MELEE WEAPONS (Fight Phase stratagem)
 			weaponsModified := 0
+
+			// Add Charged ability to enable Lance keyword
+			exists, _ := stringExistsInSlice("Charged", conflict.Attacker.Abilities)
+			if !exists {
+				conflict.Attacker.Abilities = append(conflict.Attacker.Abilities, "Charged")
+				if combatLogger != nil {
+					combatLogger.Info(fmt.Sprintf("Added Charged ability to %s: Enables Lance keyword", conflict.Attacker.Name))
+				}
+			}
 
 			for modelIndex := range conflict.Attacker.Models {
 				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
@@ -1162,28 +1243,79 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 					}
 
 					weapon.Characteristics["Keywords"] = keywords
+
+					// Apply Lance effect (+1 to wound) since unit has Charged
+					// Only apply if not already modified
+					if weapon.Modifiers.WoundMod == 0 {
+						weapon.Modifiers.WoundMod = 1
+					}
+
 					conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
 					weaponsModified++
 
 					if combatLogger != nil {
-						combatLogger.Info("Applied Red Rampage",
-							zap.String("ability", "Red Rampage"),
-							zap.String("weapon_name", weaponName),
-							zap.String("weapon_type", weapon.Type),
-							zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
-							zap.String("effect", "Added Lethal Hits + Lance (melee only)"),
-							zap.String("new_keywords", keywords),
-							zap.Bool("unit_battle_shocked", true))
+						combatLogger.Info(fmt.Sprintf("Applied Red Rampage to %s (%s): Added Lethal Hits + Lance (melee only), WoundMod = %d, Unit Battle-shocked",
+							weaponName,
+							conflict.Attacker.Models[modelIndex].Name,
+							weapon.Modifiers.WoundMod))
 					}
 				}
 			}
-
-			if _heavyComments {
-				fmt.Printf("Applied Red Rampage: Melee weapons gain Lethal Hits + Lance, unit becomes Battle-shocked (%d melee weapons modified)\n", weaponsModified)
+			if combatLogger != nil {
+				combatLogger.Info(fmt.Sprintf("Applied Red Rampage: Modified %d melee weapons", weaponsModified))
 			}
 
-			// Note: In a real implementation, you'd track that the unit is Battle-shocked
-			// This affects objective control (becomes 0) and prevents use of certain stratagems
+		case "crithitfish":
+			critFishWeaponsModified := 0
+			for modelIndex := range conflict.Attacker.Models {
+				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+					if !weapon.Modifiers.CritHitFish {
+						weapon.Modifiers.CritHitFish = true
+						conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+						critFishWeaponsModified++
+
+						if combatLogger != nil {
+							combatLogger.Info(fmt.Sprintf("Applied CritHitFish to %s (%s): CritHitFish = true",
+								weaponName,
+								conflict.Attacker.Models[modelIndex].Name))
+						}
+					}
+				}
+			}
+			if combatLogger != nil {
+				combatLogger.Info(fmt.Sprintf("Applied CritHitFish: Modified %d weapons", critFishWeaponsModified))
+			}
+		}
+	}
+
+	// Process defender abilities
+	for _, ability := range conflict.Defender.Abilities {
+		switch strings.ToLower(ability) {
+		case "stealth":
+			// Stealth subtracts 1 from hit rolls for ranged attacks
+			rangedWeaponsModified := 0
+			for modelIndex := range conflict.Attacker.Models {
+				for weaponName, weapon := range conflict.Attacker.Models[modelIndex].Loadouts {
+					weaponType := strings.ToLower(weapon.Type)
+					if strings.Contains(weaponType, "ranged") {
+						previousHitMod := weapon.Modifiers.HitMod
+						weapon.Modifiers.HitMod -= 1
+						conflict.Attacker.Models[modelIndex].Loadouts[weaponName] = weapon
+						rangedWeaponsModified++
+
+						if combatLogger != nil {
+							combatLogger.Info(fmt.Sprintf("Applied Stealth to %s (%s): HitMod -= 1 (was %d, now %d)",
+								weaponName,
+								conflict.Attacker.Models[modelIndex].Name,
+								previousHitMod,
+								weapon.Modifiers.HitMod))
+						}
+					}
+				}
+			}
+			if combatLogger != nil {
+				combatLogger.Info(fmt.Sprintf("Applied Stealth: Modified %d ranged weapons", rangedWeaponsModified))
+			}
 		}
 	}
 
@@ -1202,24 +1334,9 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 					twinLinkedWeaponsModified++
 
 					if combatLogger != nil {
-						combatLogger.Info("Applied Twin-linked",
-							zap.String("ability", "Twin-linked"),
-							zap.String("weapon_name", weaponName),
-							zap.String("model_name", conflict.Attacker.Models[modelIndex].Name),
-							zap.String("weapon_keywords", keywords),
-							zap.String("detection_method", func() string {
-								if strings.Contains(weaponNameLower, "twin-linked") {
-									return "weapon name"
-								}
-								return "weapon keywords"
-							}()),
-							zap.String("effect", "RerollWounds = true"),
-							zap.Bool("previous_reroll_wounds", false),
-							zap.Bool("new_reroll_wounds", true))
-					}
-
-					if _heavyComments {
-						fmt.Printf("Applied Twin-linked: %s gains reroll wounds\n", weaponName)
+						combatLogger.Info(fmt.Sprintf("Applied Twin-linked to %s (%s): RerollWounds = true (was false)",
+							weaponName,
+							conflict.Attacker.Models[modelIndex].Name))
 					}
 				}
 			}
@@ -1227,8 +1344,8 @@ func (conflict *UnitAttackSequence) applyAbilities() {
 	}
 
 	if combatLogger != nil {
-		combatLogger.Info("Ability processing complete",
-			zap.String("attacker_unit", conflict.Attacker.Name),
-			zap.Int("twin_linked_weapons_modified", twinLinkedWeaponsModified))
+		combatLogger.Info(fmt.Sprintf("Ability processing complete for %s: Modified %d twin-linked weapons",
+			conflict.Attacker.Name,
+			twinLinkedWeaponsModified))
 	}
 }

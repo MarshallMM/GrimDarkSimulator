@@ -1,0 +1,46 @@
+name: Captain
+type: model
+cost: 80
+abilities:
+- Finest Hour
+- Invulnerable Save (4+)
+- Leader
+- Oath of Moment
+- Rites of Battle
+keywords:
+- Captain
+- Character
+- 'Faction: Adeptus Astartes'
+- Grenades
+- Imperium
+- Infantry
+- Tacticus
+models:
+- name: Captain
+  count: 1
+  stats:
+    ISV: 4+
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "5"
+  loadouts:
+    Power Fist:
+      name: Power Fist
+      type: Melee Weapons
+      A: "2"
+      AP: "-2"
+      D: "2"
+      Keywords: '-'
+      Range: Melee
+      S: "10"
+      WS: 3+
+loadout_options:
+- name: Wargear
+  type: group
+  options:
+  - Bolt Pistol, Master-crafted Bolter, Melee Weapon
+  - Heavy Bolt Pistol, Master-crafted power weapon and 1 Relic Shield
+  - Pistol and Melee Weapon

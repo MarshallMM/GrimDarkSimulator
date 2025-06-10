@@ -1,0 +1,73 @@
+name: Vindicator
+type: model
+cost: 185
+abilities:
+- 'Damaged: 1-4 Wounds Remaining'
+- Deadly Demise
+- Oath of Moment
+- Siege Shield
+keywords:
+- 'Faction: Adeptus Astartes'
+- Imperium
+- Smoke
+- Vehicle
+- Vindicator
+models:
+- name: Vindicator
+  count: 1
+  stats:
+    LD: 6+
+    M: 9"
+    OC: "3"
+    SV: 2+
+    T: "11"
+    W: "11"
+  loadouts:
+    Demolisher Cannon:
+      name: Demolisher Cannon
+      type: Ranged Weapons
+      A: D6+3  # This will roll D6+3 attacks
+      AP: "-3"
+      BS: 3+
+      D: D6
+      Keywords: Blast
+      Range: 24"
+      S: "14"
+    Hunter Killer Missile:
+      name: Hunter Killer Missile
+      type: Ranged Weapons
+      A: "1"  # Single shot weapon
+      AP: "-3"
+      BS: 2+
+      D: D6
+      Keywords: One Shot
+      Range: 48"
+      S: "14"
+    Storm Bolter:
+      name: Storm Bolter
+      type: Ranged Weapons
+      A: "2"  # Two shots
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Rapid Fire 2
+      Range: 24"
+      S: "4"
+    Armoured Tracks:
+      name: Armoured Tracks
+      type: Melee Weapons
+      A: "3"  # Three melee attacks
+      AP: "0"
+      D: "1"
+      Keywords: '-'
+      Range: Melee
+      S: "6"
+      WS: 4+
+loadout_options:
+- name: Wargear
+  type: group
+  options:
+  - Demolisher Cannon
+  - Armoured Tracks
+  - Hunter Killer Missile
+  - Storm Bolter

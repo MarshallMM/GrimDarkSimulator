@@ -1,4 +1,4 @@
-module main.go
+module GrimDarkSimulator
 
 go 1.19
 

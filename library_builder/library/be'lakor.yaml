@@ -1,0 +1,42 @@
+name: Be'lakor
+type: model
+cost: 375
+abilities:
+- 'Damaged: 1-6 wounds remaining'
+- Deadly Demise
+- Deep Strike
+- Disciples of Be'lakor
+- Invulnerable Save (4+)
+- Shadow Form
+- Stealth
+- The Dark Master (Aura)
+- The Shadow of Chaos
+- Warp Rifts
+keywords:
+- Be'lakor
+- Chaos
+- Character
+- Daemon
+- Epic Hero
+- 'Faction: Legiones Daemonica'
+- Fly
+- Monster
+- Psyker
+- Shadow Legion
+- Undivided
+models:
+- name: Be'lakor
+  count: 1
+  stats:
+    ISV: 4+
+    LD: 6+
+    M: 12"
+    OC: "5"
+    SV: 3+
+    T: "11"
+    W: "20"
+loadout_options:
+- name: Betraying Shades
+  type: upgrade
+- name: The Blade of Shadows
+  type: upgrade

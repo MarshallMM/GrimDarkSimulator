@@ -1,0 +1,192 @@
+name: Sternguard Veteran Squad
+type: unit
+cost: 100
+abilities:
+- Oath of Moment
+- Sternguard Focus
+keywords:
+- Grenades
+- Imperium
+- Infantry
+- Sternguard Veteran Squad
+- Tacticus
+models:
+- name: Sternguard Veteran Squad
+  count: 1
+  stats:
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "2"
+- name: Sternguard Veteran Sergeant
+  count: 1
+  stats:
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "2"
+  loadouts:
+    Astartes Chainsword:
+      name: Astartes Chainsword
+      type: Melee Weapons
+      A: "6"
+      AP: "-1"
+      D: "1"
+      Keywords: '-'
+      Range: Melee
+      S: "4"
+      WS: 3+
+    Close Combat Weapon:
+      name: Close Combat Weapon
+      type: Melee Weapons
+      A: "4"
+      AP: "0"
+      D: "1"
+      Keywords: '-'
+      Range: Melee
+      S: "4"
+      WS: 3+
+    Combi-weapon:
+      name: Combi-weapon
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 4+
+      D: "1"
+      Keywords: Anti-infantry 4+, Devastating Wounds, Rapid Fire 1
+      Range: 24"
+      S: "4"
+    Power Fist:
+      name: Power Fist
+      type: Melee Weapons
+      A: "4"
+      AP: "-2"
+      D: "2"
+      Keywords: '-'
+      Range: Melee
+      S: "8"
+      WS: 3+
+    Power Weapon:
+      name: Power Weapon
+      type: Melee Weapons
+      A: "5"
+      AP: "-2"
+      D: "1"
+      Keywords: '-'
+      Range: Melee
+      S: "5"
+      WS: 3+
+    Sternguard Bolt Pistol:
+      name: Sternguard Bolt Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Devastating Wounds, Pistol
+      Range: 12"
+      S: "4"
+    Sternguard Bolt Rifle:
+      name: Sternguard Bolt Rifle
+      type: Ranged Weapons
+      A: "2"
+      AP: "-1"
+      BS: 3+
+      D: "1"
+      Keywords: Assault, Devastating Wounds, Heavy, Rapid Fire 1
+      Range: 24"
+      S: "4"
+- name: Sternguard Veteran Squad
+  count: 1
+  stats:
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "2"
+  loadouts:
+    Close Combat Weapon:
+      name: Close Combat Weapon
+      type: Melee Weapons
+      A: "4"
+      AP: "0"
+      D: "1"
+      Keywords: '-'
+      Range: Melee
+      S: "4"
+      WS: 3+
+    Pyrecannon:
+      name: Pyrecannon
+      type: Ranged Weapons
+      A: D6+1
+      AP: "-1"
+      BS: N/A
+      D: "1"
+      Keywords: Ignores Cover, Torrent
+      Range: 12"
+      S: "6"
+    Sternguard Bolt Pistol:
+      name: Sternguard Bolt Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Devastating Wounds, Pistol
+      Range: 12"
+      S: "4"
+    Sternguard Heavy Bolter:
+      name: Sternguard Heavy Bolter
+      type: Ranged Weapons
+      A: "3"
+      AP: "-1"
+      BS: 4+
+      D: "2"
+      Keywords: Devastating Wounds, Heavy, Sustained Hits 1
+      Range: 36"
+      S: "5"
+- name: Sternguard Veteran Squad
+  count: 1
+  stats:
+    LD: 6+
+    M: 6"
+    OC: "1"
+    SV: 3+
+    T: "4"
+    W: "2"
+  loadouts:
+    Close Combat Weapon:
+      name: Close Combat Weapon
+      type: Melee Weapons
+      A: "4"
+      AP: "0"
+      D: "1"
+      Keywords: '-'
+      Range: Melee
+      S: "4"
+      WS: 3+
+    Combi-weapon:
+      name: Combi-weapon
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 4+
+      D: "1"
+      Keywords: Anti-infantry 4+, Devastating Wounds, Rapid Fire 1
+      Range: 24"
+      S: "4"
+    Sternguard Bolt Pistol:
+      name: Sternguard Bolt Pistol
+      type: Ranged Weapons
+      A: "1"
+      AP: "0"
+      BS: 3+
+      D: "1"
+      Keywords: Devastating Wounds, Pistol
+      Range: 12"
+      S: "4"
